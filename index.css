@@ -1,0 +1,8 @@
+html, body, #main, #view, #codemirror, .CodeMirror {
+  height: 100%;
+  margin: 0;
+}
+
+.bgGreen {
+  background-color: lime;
+}
