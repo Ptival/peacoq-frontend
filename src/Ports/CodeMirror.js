@@ -22,4 +22,5 @@ function effizeM(m) {
 }
 
 exports._codeMirror = effizeF(CodeMirror)
+exports._getDoc     = effizeM("getDoc")
 exports._hasFocus   = effizeM("hasFocus")

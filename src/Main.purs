@@ -3,16 +3,12 @@ module Main where
 import Prelude
 import Halogen.Aff as HA
 import CodeMirror.Component (ui)
---import Control.Monad.Aff (Aff)
 import Control.Monad.Aff.Console (CONSOLE, log)
 import Control.Monad.Eff (Eff)
-import Control.Monad.Eff.Class (liftEff)
---import DOM.HTML.Types (HTMLElement)
 import DOM.Node.ParentNode (QuerySelector(..))
 import Data.Maybe (Maybe(..))
 import Halogen.Aff.Util (selectElement)
 import Halogen.VDom.Driver (runUI)
-import Ports.CodeMirror (codeMirror, hasFocus)
 
 main :: Eff (HA.HalogenEffects (console :: CONSOLE)) Unit
 main = HA.runHalogenAff do
@@ -20,17 +16,22 @@ main = HA.runHalogenAff do
   case mbody of
     Nothing -> log "body not found"
     Just body -> do
-      cm <- runUI ui { code : initialCode, id : 42 } body
+      cm <- runUI ui { code : initialCode, containerId : "codemirror" } body
+      -- log $ "About to query Init"
+      -- cm.query (action Init)
+      {-
       editor <- liftEff $ codeMirror body { autofocus : true
+                                          , lineNumbers : true
                                           , mode : "text/x-ocaml"
                                           , value : initialCode
                                           }
       focused <- liftEff $ hasFocus editor
       log $ "Has focus? " <> show focused
---       cm.subscribe $ consumer $ case _ of
---         CodeMirrorComponent.AddedMarker id from to -> do
---           _ <- log $ "Added marker: " <> show id <> " from " <> show from <> " to " <> show to
---           pure Nothing
+      cm.subscribe $ consumer $ case _ of
+        AddedMarker id from to -> do
+          _ <- log $ "Added marker: " <> show id <> " from " <> show from <> " to " <> show to
+          pure Nothing
+      -}
       pure unit
 
 initialCode :: String

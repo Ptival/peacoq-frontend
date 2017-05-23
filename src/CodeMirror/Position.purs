@@ -6,7 +6,7 @@ import Prelude
 import Data.Array as Array
 import Data.String as String
 import Data.String.Utils as String.Utils
-import Data.Generic (class Generic, gShow)
+import Data.Generic (class Generic, gEq, gShow)
 import Data.Maybe (Maybe(..))
 
 newtype Position = Position
@@ -18,6 +18,9 @@ unPosition :: Position -> { line :: Int, ch :: Int }
 unPosition (Position p) = p
 
 derive instance genericPosition :: Generic Position
+
+instance eqPosition :: Eq Position where
+  eq = gEq
 
 instance showPosition :: Show Position where
   show = gShow
@@ -40,26 +43,22 @@ type PositionState =
   , position  :: Position
   }
 
--- nextPosition :: forall m. MonadThrow Unit m => MonadState PositionState m => m Unit
--- nextPosition = pure unit
+nextPositionState :: PositionState -> Maybe PositionState
+nextPositionState { docAfter, docBefore, position } =
+  if String.length docAfter == 0
+  then Nothing
+  else do
+    { head, tail } <- String.uncons docAfter
+    Just { docAfter  : tail
+         , docBefore : docBefore <> String.singleton head
+         , position  : if head == '\n' then bumpLine position else bumpCh position
+         }
 
-addPos :: Position -> Position -> Position
-addPos (Position pos1) (Position pos2) = Position
-    { line : pos1.line + pos2.line
-    , ch : if pos2.line == 0 then pos1.ch + pos2.ch else pos2.ch
-    }
-
-findFirstPositionWhere :: (String -> Boolean) -> String -> Maybe Position
-findFirstPositionWhere cond s0 = aux s0 (Position { line : 0, ch : 0 })
-  where
-    aux :: String -> Position -> Maybe Position
-    aux "" pos = Nothing
-    aux s  pos =
-      if cond s then
-        Just pos
-      else do
-        { head, tail } <- String.uncons s
-        aux s (if head == '\n' then bumpLine pos else bumpCh pos)
+findFirstPositionWhere :: (String -> Boolean) -> PositionState -> Maybe PositionState
+findFirstPositionWhere cond s =
+  if cond s.docAfter
+  then Just s
+  else nextPositionState s >>= findFirstPositionWhere cond
 
 stringStartsWithTerminator :: String -> Boolean
 stringStartsWithTerminator s =
@@ -77,11 +76,23 @@ stringAtPosition (Position { line, ch }) s =
       then Nothing
       else Just (String.joinWith "\n" ((String.drop ch head) Array.: tail))
 
+makePositionState :: String -> PositionState
+makePositionState s =
+  { docAfter  : s
+  , docBefore : ""
+  , position  : initialPosition
+  }
+
+moveToPosition :: Position -> PositionState -> Maybe PositionState
+moveToPosition target s =
+  if s.position == target
+  then Just s
+  else nextPositionState s >>= moveToPosition target
+
 -- | Given a corpus and a position, find the next Coq terminator
 nextPosition :: String -> Position -> Maybe Position
-nextPosition code (pos1@(Position { line, ch })) = do
-  remainingCode <- stringAtPosition pos1 code
-  pos2 <- findFirstPositionWhere stringStartsWithTerminator remainingCode
-  let finalPos = addPos pos1 pos2
+nextPosition code from = do
+  psCurrentPosition <- moveToPosition from (makePositionState code)
+  { position } <- findFirstPositionWhere stringStartsWithTerminator psCurrentPosition
   -- bumping to go after the period
-  Just (bumpCh finalPos)
+  Just (bumpCh position)
