@@ -1,13 +1,14 @@
 module CodeMirror.Position where
 
--- import Control.Monad.Error.Class
--- import Control.Monad.State.Class
 import Prelude
 import Data.Array as Array
 import Data.String as String
 import Data.String.Utils as String.Utils
+import Control.Apply (applySecond, lift2)
+import Control.Monad.State.Class (class MonadState, get, gets, modify, put)
 import Data.Generic (class Generic, gEq, gShow)
 import Data.Maybe (Maybe(..))
+import Data.Traversable (traverse)
 
 newtype Position = Position
   { line :: Int
@@ -43,28 +44,27 @@ type PositionState =
   , position  :: Position
   }
 
-nextPositionState :: PositionState -> Maybe PositionState
-nextPositionState { docAfter, docBefore, position } =
+-- | Moves the position state by one character, returns the character that was after and is now before
+forward :: ∀ m. MonadState PositionState m => m (Maybe Char)
+forward = do
+  { docAfter, docBefore, position } <- get
   if String.length docAfter == 0
-  then Nothing
-  else do
-    { head, tail } <- String.uncons docAfter
-    Just { docAfter  : tail
-         , docBefore : docBefore <> String.singleton head
-         , position  : if head == '\n' then bumpLine position else bumpCh position
-         }
+    then pure Nothing
+    else do
+      String.uncons docAfter # traverse \ { head, tail } -> do
+        modify (\ s -> s { docAfter  = tail
+                         , docBefore = docBefore <> String.singleton head
+                         , position  = if head == '\n' then bumpLine position else bumpCh position
+                         })
+        pure head
 
-findFirstPositionWhere :: (String -> Boolean) -> PositionState -> Maybe PositionState
-findFirstPositionWhere cond s =
-  if cond s.docAfter
-  then Just s
-  else nextPositionState s >>= findFirstPositionWhere cond
-
-stringStartsWithTerminator :: String -> Boolean
-stringStartsWithTerminator s =
-    String.Utils.startsWith ". " s
-    || String.Utils.startsWith ".\n" s
-    || s == "." -- captures the final period if there's no space or newline
+-- | Returns the position at which the document suffix satisfies a condition
+findFirstPositionWhere :: ∀ m. MonadState PositionState m => (String -> Boolean) -> m (Maybe Position)
+findFirstPositionWhere cond = do
+  { docAfter, position } <- get
+  if cond docAfter
+    then pure $ Just position
+    else forward `applySecond` findFirstPositionWhere cond
 
 stringAtPosition :: Position -> String -> Maybe String
 stringAtPosition (Position { line, ch }) s =
@@ -83,16 +83,28 @@ makePositionState s =
   , position  : initialPosition
   }
 
-moveToPosition :: Position -> PositionState -> Maybe PositionState
-moveToPosition target s =
-  if s.position == target
-  then Just s
-  else nextPositionState s >>= moveToPosition target
+moveToPosition :: ∀ m. MonadState PositionState m => Position -> m Unit
+moveToPosition target = do
+  p <- gets _.position
+  if p == target
+    then pure unit
+    else forward *> moveToPosition target
 
--- | Given a corpus and a position, find the next Coq terminator
-nextPosition :: String -> Position -> Maybe Position
-nextPosition code from = do
-  psCurrentPosition <- moveToPosition from (makePositionState code)
-  { position } <- findFirstPositionWhere stringStartsWithTerminator psCurrentPosition
-  -- bumping to go after the period
-  Just (bumpCh position)
+-- | `peek n` lets you peek `n` characters into the document, not modifying the state
+peek :: ∀ m. MonadState PositionState m => Int -> m String
+peek n0 = do
+  s <- get
+  r <- go n0
+  put s
+  pure r
+  where
+    go n = if n == 0
+           then pure ""
+           else lift2 squash forward (peek (n - 1))
+    squash Nothing  s = s
+    squash (Just c) s = String.singleton c <> s
+
+reachedDocEnd :: ∀ m. MonadState PositionState m => m Boolean
+reachedDocEnd = do
+  s <- gets _.docAfter
+  pure (String.length s == 0)

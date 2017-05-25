@@ -11,6 +11,7 @@
     "requirejs": "^2.3.2"
   },
   "devDependencies": {
+    "@purescript/psci-support": "^3.0.0",
     "@types/codemirror": "0.0.40",
     "bower": "^1.8.0",
     "chokidar-cli": "^1.2.0",

@@ -13,14 +13,24 @@ function effizeF(f) {
 // Eff-ize a method, takes as input the method name (as a string)
 function effizeM(m) {
     return function () {
-        var me = arguments[arguments.length - 1]
-        var args = Array.prototype.slice.call(arguments, 0, -1)
+        const me = arguments[0]
+        const args = Array.prototype.slice.call(arguments, 1)
+        // console.log("Will call ", me, "'s method", m, " with arguments ", args)
         return function () {
+            // console.log("About to call ", me, "'s method", m, " with arguments ", args)
             return me[m].apply(me, args)
         }
     }
 }
 
+exports._on = function(eventType, self, callback) {
+    return function() {
+        return self.on(eventType, function(e) { callback(e)() })
+    }
+}
+
 exports._codeMirror = effizeF(CodeMirror)
 exports._getDoc     = effizeM("getDoc")
+exports._getValue   = effizeM("getValue")
 exports._hasFocus   = effizeM("hasFocus")
+exports._markText   = effizeM("markText")

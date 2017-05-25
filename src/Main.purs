@@ -2,37 +2,18 @@ module Main where
 
 import Prelude
 import Halogen.Aff as HA
-import CodeMirror.Component (ui)
-import Control.Monad.Aff.Console (CONSOLE, log)
+import CodeMirror.Component (codeMirrorComponent)
+import Control.Monad.Aff.Console (CONSOLE)
 import Control.Monad.Eff (Eff)
 import DOM.Node.ParentNode (QuerySelector(..))
-import Data.Maybe (Maybe(..))
+import Data.Traversable (traverse_)
 import Halogen.Aff.Util (selectElement)
 import Halogen.VDom.Driver (runUI)
 
 main :: Eff (HA.HalogenEffects (console :: CONSOLE)) Unit
 main = HA.runHalogenAff do
-  mbody <- selectElement (QuerySelector "body")
-  case mbody of
-    Nothing -> log "body not found"
-    Just body -> do
-      cm <- runUI ui { code : initialCode, containerId : "codemirror" } body
-      -- log $ "About to query Init"
-      -- cm.query (action Init)
-      {-
-      editor <- liftEff $ codeMirror body { autofocus : true
-                                          , lineNumbers : true
-                                          , mode : "text/x-ocaml"
-                                          , value : initialCode
-                                          }
-      focused <- liftEff $ hasFocus editor
-      log $ "Has focus? " <> show focused
-      cm.subscribe $ consumer $ case _ of
-        AddedMarker id from to -> do
-          _ <- log $ "Added marker: " <> show id <> " from " <> show from <> " to " <> show to
-          pure Nothing
-      -}
-      pure unit
+  selectElement (QuerySelector "body") >>= traverse_ \ body -> do
+    runUI codeMirrorComponent { code : initialCode } body
 
 initialCode :: String
 initialCode = """

@@ -23,7 +23,7 @@ requirejs([
     "codemirror",
     "codemirror/mode/mllike/mllike",
 ], (CodeMirror) => {
-    console.log(`Binding CodeMirror`)
+    // console.log(`Binding CodeMirror`)
     window.CodeMirror = CodeMirror
     require([
         "output/app",
