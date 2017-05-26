@@ -23,11 +23,14 @@ function effizeM(m) {
     }
 }
 
-exports._on = function(eventType, self, callback) {
+function on(eventType, self, callback) {
     return function() {
         return self.on(eventType, function(e) { callback(e)() })
     }
 }
+
+exports._onCodeMirror = on
+exports._onDoc        = on
 
 exports._codeMirror = effizeF(CodeMirror)
 exports._getDoc     = effizeM("getDoc")

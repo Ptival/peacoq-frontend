@@ -1,7 +1,7 @@
 module Ports.CodeMirror where
 
 import Prelude
-import CodeMirror.Position (Position(..))
+import CodeMirror.Position (Position)
 import Control.Monad.Eff (Eff)
 import DOM.HTML.Types (HTMLElement)
 import Data.Function.Uncurried (Fn1, Fn2, Fn3, Fn4, runFn1, runFn2, runFn3, runFn4)
@@ -44,7 +44,11 @@ foreign import _markText ::
 markText :: ∀ e. Doc -> Position -> Position -> Maybe TextMarkerOptions -> Eff e TextMarker
 markText d p1 p2 m = runFn4 _markText d p1 p2 (toNullable m)
 
-foreign import _on :: ∀ event e. Fn3 String CodeMirror (event -> Eff e Unit) (Eff e Unit)
+foreign import _onCodeMirror :: ∀ event e. Fn3 String CodeMirror (event -> Eff e Unit) (Eff e Unit)
+foreign import _onDoc        :: ∀ event e. Fn3 String Doc        (event -> Eff e Unit) (Eff e Unit)
 
-onChange :: ∀ e. CodeMirror -> Eff e Unit -> Eff e Unit
-onChange cm h = runFn3 _on "change" cm (const h)
+onCodeMirrorChange :: ∀ e. CodeMirror -> Eff e Unit -> Eff e Unit
+onCodeMirrorChange cm h = runFn3 _onCodeMirror "change" cm (const h)
+
+onDocChange :: ∀ e. Doc -> Eff e Unit -> Eff e Unit
+onDocChange d h = runFn3 _onDoc "change" d (const h)

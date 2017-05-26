@@ -6,17 +6,20 @@ import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
+import CSS (fromString, width)
+import CSS.Display (float, floatLeft)
 import CodeMirror.Position (Position, initialPosition, unPosition)
 import CodeMirror.TextMarker (TextMarkerId, TextMarker)
 import Control.Monad.Aff.AVar (AVAR)
 import Control.Monad.Aff.Class (class MonadAff)
 import Control.Monad.Eff.Console (CONSOLE)
-import Control.Monad.State.Class (class MonadState, get, gets, modify)
+import Control.Monad.State.Class (class MonadState, gets, modify)
 import Coq.Position (nextSentence)
 import Data.Maybe (Maybe(..))
 import Data.Traversable (traverse, traverse_)
+import Halogen.HTML.CSS (style)
 import Halogen.Query (RefLabel(..))
-import Ports.CodeMirror (CodeMirror, codeMirror, getDoc, getValue, markText, onChange)
+import Ports.CodeMirror (CodeMirror, codeMirror, getDoc, getValue, markText, onCodeMirrorChange)
 import Stage (Stage(..))
 
 type CodeMirrorEffects e =
@@ -84,13 +87,21 @@ render { code, cursorPosition, markers, tip } =
   HH.div_
     [ HH.button [ HE.onClick $ HE.input_ AddMarker ]
                 [ HH.text "+" ]
-    , HH.p_ [ HH.text ("Line: " <> show line)]
-    , HH.pre_ [ HH.text code ]
-    , HH.div [ HP.ref (RefLabel "codemirror") ] []
+    , HH.p_ [ HH.text ("Line is: " <> show line)]
+    , HH.div
+        [ HP.ref (RefLabel "codemirror")
+        , style do
+            float floatLeft
+            width $ fromString "50%"
+        ]
+        []
+    , HH.pre
+        [ style do
+            float floatLeft
+            width $ fromString "50%"
+        ]
+        [ HH.text code ]
     ]
-
-test :: ∀ e m. MonadAff (avar :: AVAR | e) m => CodeMirror -> H.ComponentDSL State Query Message m Unit
-test cm = H.subscribe $ H.eventSource_ (onChange cm) (H.request HandleChange)
 
 eval :: forall e m. MonadAff (CodeMirrorEffects e) m => Query ~> H.ComponentDSL State Query Message m
 eval = case _ of
@@ -118,7 +129,7 @@ eval = case _ of
                            , value       : code
                            }
       H.modify (_ { codeMirror = Just cm })
-      H.subscribe $ H.eventSource_ (onChange cm) (H.request HandleChange)
+      H.subscribe $ H.eventSource_ (onCodeMirrorChange cm) (H.request HandleChange)
     pure next
 
   HandleChange k -> do
