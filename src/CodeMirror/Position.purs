@@ -10,33 +10,33 @@ import Data.Generic (class Generic, gEq, gShow)
 import Data.Maybe (Maybe(..))
 import Data.Traversable (traverse)
 
-newtype Position = Position
+type Position =
   { line :: Int
-  , ch :: Int
+  , ch   :: Int
   }
 
-unPosition :: Position -> { line :: Int, ch :: Int }
-unPosition (Position p) = p
+-- wrapper to use when you want to `(==)` or `show`
+newtype Position' = Position' Position
 
-derive instance genericPosition :: Generic Position
+derive instance genericPosition' :: Generic Position'
 
-instance eqPosition :: Eq Position where
+instance eqPosition' :: Eq Position' where
   eq = gEq
 
-instance showPosition :: Show Position where
+instance showPosition' :: Show Position' where
   show = gShow
 
 initialPosition :: Position
-initialPosition = Position
+initialPosition =
   { line : 0
   , ch : 0
   }
 
 bumpLine :: Position -> Position
-bumpLine (Position { line, ch }) = (Position { line : line + 1, ch : 0 })
+bumpLine { line, ch } = { line : line + 1, ch : 0 }
 
 bumpCh :: Position -> Position
-bumpCh (Position { line, ch }) = (Position { line : line, ch : ch + 1 })
+bumpCh { line, ch } = { line : line, ch : ch + 1 }
 
 type PositionState =
   { docAfter  :: String
@@ -67,7 +67,7 @@ findFirstPositionWhere cond = do
     else forward `applySecond` findFirstPositionWhere cond
 
 stringAtPosition :: Position -> String -> Maybe String
-stringAtPosition (Position { line, ch }) s =
+stringAtPosition { line, ch } s =
   let ls = String.Utils.lines s in
   let remainingLines = Array.drop line ls in
   do
@@ -86,7 +86,7 @@ makePositionState s =
 moveToPosition :: ∀ m. MonadState PositionState m => Position -> m Unit
 moveToPosition target = do
   p <- gets _.position
-  if p == target
+  if Position' p == Position' target
     then pure unit
     else forward *> moveToPosition target
 

@@ -23,14 +23,24 @@ function effizeM(m) {
     }
 }
 
-function on(eventType, self, callback) {
-    return function() {
-        return self.on(eventType, function(e) { callback(e)() })
+function on(eventType, kArgs) {
+    return function(self, callback) {
+        return function() {
+            return self.on(eventType, function() {
+                if (kArgs.length != arguments.length) {
+                    throw "FFI problem: for " + eventType + ", wrong kArgs length"
+                }
+                const args = {}
+                for (var i in kArgs) {
+                    args[kArgs[i]] = arguments[i]
+                }
+                callback(args)()
+            })
+        }
     }
 }
 
-exports._onCodeMirror = on
-exports._onDoc        = on
+exports._onCodeMirrorChange = on("change", ["instance", "changeObj"])
 
 exports._codeMirror = effizeF(CodeMirror)
 exports._getDoc     = effizeM("getDoc")
