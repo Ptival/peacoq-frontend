@@ -4,15 +4,50 @@ import Prelude
 import CodeMirror.Position (Position)
 import Control.Monad.Eff (Eff)
 import DOM.HTML.Types (HTMLElement)
+import Data.Foreign (Foreign)
 import Data.Function.Uncurried (Fn1, Fn2, Fn3, Fn4, runFn1, runFn2, runFn3, runFn4)
-import Data.Maybe (Maybe)
+import Data.Maybe (Maybe(..))
 import Data.Nullable (Nullable, toNullable)
+import Data.Options (Options, opt, options, (:=))
+
+type KeyMap = {}
+
+type RawConfiguration =
+  { autofocus     :: Nullable Boolean
+  , extraKeys     :: Nullable Foreign
+  , lineNumbers   :: Nullable Boolean
+  , lineSeparator :: Nullable String
+  , mode          :: Nullable String
+  , value         :: Nullable String
+  }
 
 type Configuration =
-  { autofocus  :: Boolean
-  , lineNumbers :: Boolean
-  , mode       :: String
-  , value      :: String
+  { autofocus     :: Maybe Boolean
+  , extraKeys     :: Maybe (Options KeyMap)
+  , lineNumbers   :: Maybe Boolean
+  , lineSeparator :: Maybe String
+  , mode          :: Maybe String
+  , value         :: Maybe String
+  }
+
+toRawConfiguration :: Configuration -> RawConfiguration
+toRawConfiguration c =
+  { autofocus     : toNullable c.autofocus
+  , extraKeys     : toNullable (options <$> c.extraKeys)
+  , lineNumbers   : toNullable c.lineNumbers
+  , lineSeparator : toNullable c.lineSeparator
+  , mode          : toNullable c.mode
+  , value         : toNullable c.value
+  }
+
+defaultConfiguration :: Configuration
+defaultConfiguration =
+  { autofocus     : Nothing
+  , extraKeys     : Nothing
+  , lineNumbers   : Nothing
+  , lineSeparator : Nothing
+  , mode          : Nothing
+  , value         : Nothing
   }
 
 type TextMarkerOptions =
@@ -23,9 +58,9 @@ data CodeMirror
 data Doc
 data TextMarker
 
-foreign import _codeMirror :: ∀ e. Fn2 HTMLElement Configuration (Eff e CodeMirror)
+foreign import _codeMirror :: ∀ e. Fn2 HTMLElement RawConfiguration (Eff e CodeMirror)
 codeMirror :: ∀ e. HTMLElement -> Configuration -> Eff e CodeMirror
-codeMirror = runFn2 _codeMirror
+codeMirror e c = runFn2 _codeMirror e (toRawConfiguration c)
 
 foreign import _getDoc :: forall e. Fn1 CodeMirror (Eff e Doc)
 getDoc :: ∀ e. CodeMirror -> Eff e Doc

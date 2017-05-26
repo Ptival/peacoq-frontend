@@ -16,10 +16,11 @@ import Control.Monad.Eff.Console (CONSOLE)
 import Control.Monad.State.Class (class MonadState, gets, modify)
 import Coq.Position (nextSentence)
 import Data.Maybe (Maybe(..))
+import Data.Options (Options(..), opt, (:=))
 import Data.Traversable (traverse, traverse_)
 import Halogen.HTML.CSS (style)
 import Halogen.Query (RefLabel(..))
-import Ports.CodeMirror (CodeMirror, codeMirror, getDoc, getValue, markText, onCodeMirrorChange)
+import Ports.CodeMirror (CodeMirror, KeyMap, codeMirror, defaultConfiguration, getDoc, getValue, markText, onCodeMirrorChange)
 import Stage (Stage(..))
 
 type CodeMirrorEffects e =
@@ -53,6 +54,7 @@ initialState { code } =
 data Query a
   = AddMarker    a
   | HandleChange (H.SubscribeStatus -> a)
+  -- | HandleKey    (H.SubscribeStatus -> a)
   | Init         a
 
 data Message = Unit
@@ -103,6 +105,15 @@ render { code, cursorPosition, markers, tip } =
         [ HH.text code ]
     ]
 
+--foo :: forall s f g p o m. H.HalogenM s f g p o m Unit
+--foo f = H.subscribe $ H.eventSource_ f (H.request HandleKey)
+
+-- keyMap :: Options KeyMap
+-- keyMap =
+--   opt    "Ctrl-Alt-Down" := foo
+--   <> opt "Ctrl-Up"       := foo
+--   <> opt "Tab"           := foo
+
 eval :: forall e m. MonadAff (CodeMirrorEffects e) m => Query ~> H.ComponentDSL State Query Message m
 eval = case _ of
 
@@ -123,11 +134,14 @@ eval = case _ of
     H.getHTMLElementRef (H.RefLabel "codemirror") >>= traverse_ \ element -> do
       --liftEff $ log "Found RefLabel codemirror"
       cm <- H.liftEff do
-        codeMirror element { autofocus   : true
-                           , lineNumbers : true
-                           , mode        : "text/x-ocaml"
-                           , value       : code
-                           }
+        codeMirror element
+          (defaultConfiguration { autofocus   = Just true
+                                --, keyMaps     = Just keyMap
+                                , lineNumbers = Just true
+                                , mode        = Just "text/x-ocaml"
+                                , value       = Just code
+                                }
+          )
       H.modify (_ { codeMirror = Just cm })
       H.subscribe $ H.eventSource_ (onCodeMirrorChange cm) (H.request HandleChange)
     pure next
