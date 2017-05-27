@@ -105,10 +105,7 @@ render { code, cursorPosition, markers, tip } =
         [ HH.text code ]
     ]
 
-foo :: Query Unit
-foo = H.action HandleKey
-
-type DSL m = H.ComponentDSL State Query Message m
+type DSL = H.ComponentDSL State Query Message
 
 eval :: ∀ e m. MonadAff (CodeMirrorEffects e) m => Query ~> DSL m
 eval = case _ of
@@ -157,12 +154,13 @@ eval = case _ of
     keyMap =
       opt "Ctrl-Alt-Down" := log "yolo"
 
-codeMirrorComponent :: ∀ e m. MonadAff (CodeMirrorEffects e) m => H.Component HH.HTML Query Input Message m
+codeMirrorComponent ::
+  ∀ e m. MonadAff (CodeMirrorEffects e) m => H.Component HH.HTML Query Input Message m
 codeMirrorComponent = H.lifecycleComponent
-     { initialState : initialState
-     , render
-     , eval
-     , receiver     : const Nothing
-     , initializer  : Just $ H.action Init
-     , finalizer    : Nothing
-     }
+  { initialState : initialState
+  , render
+  , eval
+  , receiver     : const Nothing
+  , initializer  : Just $ H.action Init
+  , finalizer    : Nothing
+  }

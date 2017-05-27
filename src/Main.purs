@@ -1,6 +1,7 @@
 module Main where
 
 import Prelude
+import Halogen as H
 import Halogen.Aff as HA
 import CodeMirror.Component (codeMirrorComponent)
 import Control.Monad.Aff.Console (CONSOLE)
@@ -9,11 +10,38 @@ import DOM.Node.ParentNode (QuerySelector(..))
 import Data.Traversable (traverse_)
 import Halogen.Aff.Util (selectElement)
 import Halogen.VDom.Driver (runUI)
+import Network.HTTP.Affjax (AJAX)
+import SerAPI.Command (Command(..))
+import SerAPI.Command.Control (Control(..), defaultAddOptions)
+import SerAPI.Component (Query(..), serAPIComponent)
 
-main :: Eff (HA.HalogenEffects (console :: CONSOLE)) Unit
+type AppEffects =
+  ( ajax    :: AJAX
+  , console :: CONSOLE
+  )
+
+stmAdd :: String -> Query Unit
+stmAdd s = H.action $ Send $ Control $ StmAdd { addOptions : defaultAddOptions
+                                              , sentence   : s
+                                              }
+
+stmQuit :: Query Unit
+stmQuit = H.action $ Send $ Control $ Quit
+
+ping :: Query Unit
+ping = H.action Ping
+
+main :: Eff (HA.HalogenEffects AppEffects) Unit
 main = HA.runHalogenAff do
   selectElement (QuerySelector "body") >>= traverse_ \ body -> do
-    runUI codeMirrorComponent { code : initialCode } body
+    sapi <- runUI serAPIComponent     { }                    body
+    cm   <- runUI codeMirrorComponent { code : initialCode } body
+    sapi.query $ ping
+    sapi.query $ stmQuit
+    sapi.query $ ping
+    sapi.query $ stmAdd "From Coq Require Import String."
+    sapi.query $ ping
+    pure unit
 
 initialCode :: String
 initialCode = """

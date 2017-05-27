@@ -1,5 +1,6 @@
 module SerAPI.Command.ToSexp (class ToSexp, toSexp) where
 
+import Data.Foldable (fold)
 import Data.String (Pattern(..), Replacement(..), replaceAll)
 import Prelude (show)
 
@@ -14,4 +15,4 @@ instance toSexpInt :: ToSexp Int where
   toSexp = show
 
 instance toSexpString :: ToSexp String where
-  toSexp = replaceAll (Pattern "\"") (Replacement "\\\"")
+  toSexp s = fold ["\"", replaceAll (Pattern "\"") (Replacement "\\\"") s, "\""]
