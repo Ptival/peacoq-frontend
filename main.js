@@ -9,6 +9,7 @@ requirejs.config({
     }
   ],
   paths: {
+    "s-expression": `${nodePath}/s-expression-amd/index`,
     // "codemirror": `${nodePath}/codemirror/lib/codemirror`,
     // "codemirror/mode/mllike/mllike": `${nodePath}/codemirror/mode/mllike/mllike`,
     // "codemirror/lib/codemirror": `${nodePath}/codemirror/lib/codemirror`,
@@ -22,9 +23,11 @@ requirejs.config({
 requirejs([
     "codemirror",
     "codemirror/mode/mllike/mllike",
-], (CodeMirror) => {
+    "s-expression",
+], (CodeMirror, _, sexp) => {
     // console.log(`Binding CodeMirror`)
     window.CodeMirror = CodeMirror
+    window.sexp = sexp
     require([
         "output/app",
     ])

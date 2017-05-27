@@ -29,6 +29,8 @@
   "devDependencies": {
     "purescript-psci-support": "^3.0.0",
     "purescript-halogen-css": "^6.0.0",
-    "purescript-options": "^3.0.0"
+    "purescript-options": "^3.0.0",
+    "purescript-integers": "^3.0.0",
+    "purescript-string-parsers": "^3.0.1"
   }
 }

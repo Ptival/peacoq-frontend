@@ -8,7 +8,8 @@
   "dependencies": {
     "codemirror": "^5.23.0",
     "npm-check-updates": "2.11.1",
-    "requirejs": "^2.3.2"
+    "requirejs": "^2.3.2",
+    "s-expression": "^3.0.3"
   },
   "devDependencies": {
     "@purescript/psci-support": "^3.0.0",

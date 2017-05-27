@@ -4,13 +4,14 @@ import Prelude
 import Halogen as H
 import Halogen.Aff as HA
 import CodeMirror.Component (codeMirrorComponent)
-import Control.Monad.Aff.Console (CONSOLE)
+import Control.Monad.Aff.Console (CONSOLE, log)
 import Control.Monad.Eff (Eff)
 import DOM.Node.ParentNode (QuerySelector(..))
 import Data.Traversable (traverse_)
 import Halogen.Aff.Util (selectElement)
 import Halogen.VDom.Driver (runUI)
 import Network.HTTP.Affjax (AJAX)
+import Ports.Sexp (sexp)
 import SerAPI.Command (Command(..))
 import SerAPI.Command.Control (Control(..), defaultAddOptions)
 import SerAPI.Component (Query(..), serAPIComponent)
@@ -33,6 +34,9 @@ ping = H.action Ping
 
 main :: Eff (HA.HalogenEffects AppEffects) Unit
 main = HA.runHalogenAff do
+  log "\n\n\n"
+  log $ show $ sexp "(Feedback((id(State 1))(contents(ProcessingIn master))(route 0)))"
+  log "\n\n\n"
   selectElement (QuerySelector "body") >>= traverse_ \ body -> do
     sapi <- runUI serAPIComponent     { }                    body
     cm   <- runUI codeMirrorComponent { code : initialCode } body

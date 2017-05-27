@@ -1,4 +1,4 @@
-"use strict";
+"use strict"
 
 // Eff-ize a function, takes as input the function
 function effizeF(f) {

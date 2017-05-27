@@ -8,3 +8,8 @@ fi
 
 npm install
 bower install
+
+(
+cd node_modules
+./requirejs/bin/r.js -convert s-expression s-expression-amd
+)
