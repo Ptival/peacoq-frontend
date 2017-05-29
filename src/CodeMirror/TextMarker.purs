@@ -6,8 +6,9 @@ import Stage (Stage)
 type TextMarkerId = Int
 
 type TextMarker =
-  { id    :: TextMarkerId
-  , from  :: Position
-  , stage :: Stage
-  , to    :: Position
+  { id       :: TextMarkerId
+  , from     :: Position
+  , sentence :: String
+  , stage    :: Stage
+  , to       :: Position
   }

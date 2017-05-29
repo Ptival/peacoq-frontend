@@ -18,3 +18,14 @@ exports._sexp = function(nothing, just, atom, list, s) {
     }
     return just(toSexp(atom, list, res))
 }
+
+exports._jsonParseArray = function(nothing, just, s) {
+    try {
+        const res = JSON.parse(s)
+        if (Array.isArray(res)) {
+            return just(res)
+        }
+        return nothing
+    }
+    catch (e) { return nothing }
+}

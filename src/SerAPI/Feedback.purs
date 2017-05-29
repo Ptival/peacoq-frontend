@@ -5,8 +5,8 @@ import Data.Generic (class Generic, gShow)
 import Data.List (List)
 import Data.Maybe (Maybe(..))
 import Ports.Sexp (Sexp(..))
-import SerAPI.Command.Control (StateId)
 import SerAPI.FromSexp (class FromSexp, fromSexp)
+import SerAPI.Types (StateId)
 
 data Contents
   = FileDependency (List String) String
@@ -28,7 +28,7 @@ instance fromSexpContents :: FromSexp Contents where
       ps <- fromSexp l
       pure $ FileDependency ps f
     List [ Atom "FileLoaded", Atom s1, Atom s2 ] -> Just $ FileLoaded s1 s2
-    List [ Atom "Processed" ] -> Just Processed
+    Atom "Processed" -> Just Processed
     List [ Atom "ProcessingIn", Atom s ] -> Just $ ProcessingIn s
     _ -> Nothing
 
@@ -46,21 +46,20 @@ instance showFeedback :: Show Feedback where
 instance fromSexpFeedback :: FromSexp Feedback where
   fromSexp = case _ of
     List [ Atom "Feedback"
-         , List [ List [ Atom "id"
-                       , List [ Atom "State"
+         , List [ List [ Atom "id",
+                         List [ Atom "State"
                               , sid
                               ]
                        ]
-                ]
-         , List [ List [ Atom "contents"
-                       , scontents
+                , List [ Atom "contents"
+                       , scontents 
+                       ]
+                , List [ Atom "route"
+                       , sroute 
                        ]
                 ]
-         , List [ List [ Atom "route"
-                       , sroute
-                       ]
-                ]
-         ] -> do
+         ]
+      -> do
       id       <- fromSexp sid
       contents <- fromSexp scontents
       route    <- fromSexp sroute

@@ -4,8 +4,7 @@ import Data.Foldable (fold)
 import Data.List (List)
 import Data.Maybe (Maybe(..))
 import SerAPI.Command.ToSexp (class ToSexp, toSexp)
-
-type StateId = Int
+import SerAPI.Types (StateId)
 
 type AddOptions =
   { limit  :: Maybe Int

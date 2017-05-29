@@ -57,14 +57,16 @@ data Query a
   | HandleKey    a
   | Init         a
 
-data Message = Unit
+data Message
+  = Sentence TextMarkerId String
 
-addMarker :: ∀ m. MonadState State m => Position -> Position -> m TextMarker
-addMarker from to = do
+addMarker :: ∀ m. MonadState State m => Position -> Position -> String -> m TextMarker
+addMarker from to sentence = do
   nextMarkerId <- gets _.nextMarkerId
   let newMarker = { id    : nextMarkerId
                   , from
                   , to
+                  , sentence
                   , stage : ToProcess
                   }
   modify (\ s -> s { nextMarkerId = nextMarkerId + 1
@@ -72,14 +74,14 @@ addMarker from to = do
                    })
   pure newMarker
 
-nextTip :: State -> Maybe Position
-nextTip { code, tip } = nextSentence code tip <#> _.position
+nextTip :: State -> Maybe { position :: Position, sentence :: String }
+nextTip { code, tip } = nextSentence code tip
 
 nextMarker :: ∀ m. MonadState State m => m (Maybe TextMarker)
 nextMarker = do
-  gets nextTip >>= traverse \ newTip -> do
+  gets nextTip >>= traverse \ { position : newTip, sentence } -> do
     tip <- gets _.tip
-    newMarker <- addMarker tip newTip
+    newMarker <- addMarker tip newTip sentence
     modify (\ s -> s { tip = newMarker.to })
     pure newMarker
 
@@ -118,6 +120,7 @@ eval = case _ of
               Just { className : "bgGreen"
                    }
         PCM.markText doc marker.from marker.to textMarkerOptions
+      H.raise $ Sentence marker.id marker.sentence
     pure next
 
   Init next -> do
