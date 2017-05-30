@@ -6,6 +6,7 @@ import Data.Maybe (Maybe(..))
 import Ports.Sexp (Sexp(..))
 import SerAPI.FromSexp (class FromSexp, fromSexp)
 
+type EditId = Int
 type StateId = Int
 
 data CoqObject = CoqObject

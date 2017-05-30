@@ -44,7 +44,7 @@ forward' :: ∀ m. Monad m => StateT NextSentenceState m (Maybe Char)
 forward' = do
   stackIsEmpty <- gets (\ { delimiterStack } -> length delimiterStack == 0)
   zoom _positionState forward >>= traverse \ c -> do
-    modify (over _sentence (singleton c <> _))
+    modify (over _sentence (_ <> singleton c))
     -- I wonder whether I want `isAlphaNum` or `not isSpace` or something else here...
     when (stackIsEmpty && isAlphaNum c) $ modify (over _seenCharacter (const true))
     pure c

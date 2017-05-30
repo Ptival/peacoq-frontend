@@ -28,6 +28,12 @@ instance fromSexpBoolean :: FromSexp Boolean where
 instance fromSexpInt :: FromSexp Int where
   fromSexp = fromAtom fromString
 
+instance fromSexpMaybe :: FromSexp t => FromSexp (Maybe t) where
+  fromSexp = case _ of
+    List [e] -> Just <$> fromSexp e
+    List []  -> Just Nothing
+    _        -> Nothing
+    
 instance fromSexpList :: FromSexp t => FromSexp (List t) where
   fromSexp = case _ of
     List l -> fromFoldable <$> traverse fromSexp l
