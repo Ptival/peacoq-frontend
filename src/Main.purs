@@ -56,7 +56,7 @@ main = HA.runHalogenAff do
 
     cm.subscribe   $ consumeCM   sapi
     sapi.subscribe $ consumeSAPI cm
-    
+
     sapi.query $ ping
     sapi.query $ stmQuit
     sapi.query $ ping

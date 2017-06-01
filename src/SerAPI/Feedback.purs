@@ -40,7 +40,7 @@ data FeedbackContent
   | GlobDef Loc String String String
   | FileDependency (Maybe String) String
   | FileLoaded String String
-  | Message Level Loc Sexp --TODO: StdPPCmds
+  | Message Level (Maybe Loc) Sexp --TODO: StdPPCmds
 
 derive instance genericFeedbackContent :: Generic FeedbackContent
 

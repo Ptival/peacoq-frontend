@@ -42,16 +42,16 @@ instance fromSexpAnswerKind :: FromSexp AnswerKind where
   fromSexp = case _ of
     Atom "Ack" -> Just Ack
     Atom "Completed" -> Just Completed
-    List [ Atom "StmAdded"
-         , sid
-         , sloc
-         , sadded
-         ]
-      -> do
+    List [ Atom "StmAdded", sid, sloc, sadded ] -> do
       id    <- fromSexp sid
       loc   <- fromSexp sloc
       added <- fromSexp sadded
       pure $ Added id loc added
+    List [ Atom "CoqExn", sm1, sm2, se ] -> do
+      m1 <- fromSexp sm1
+      m2 <- fromSexp sm2
+      e  <- fromSexp se
+      pure $ CoqExn m1 m2 e
     _ -> Nothing
 
 data Answer = Answer Int AnswerKind

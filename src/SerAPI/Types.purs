@@ -15,7 +15,7 @@ derive instance genericCoqObject :: Generic CoqObject
 
 instance showCoqObject :: Show CoqObject where
   show = gShow
-  
+
 data Loc =
   Loc
   { fname      :: String
@@ -66,10 +66,13 @@ derive instance genericLoc :: Generic Loc
 
 instance showLoc :: Show Loc where
   show = gShow
-  
-data Exn = Exn
+
+data Exn = Exn Sexp
 
 derive instance genericExn :: Generic Exn
 
 instance showExn :: Show Exn where
   show = gShow
+
+instance fromSexpExn :: FromSexp Exn where
+  fromSexp = Just <<< Exn

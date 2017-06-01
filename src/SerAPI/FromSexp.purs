@@ -6,7 +6,9 @@ import Data.List (List, fromFoldable)
 import Data.Maybe (Maybe(..))
 import Data.String (Pattern(Pattern), stripPrefix, stripSuffix)
 import Data.Traversable (traverse)
+import Data.Tuple (Tuple)
 import Ports.Sexp (Sexp(..))
+import Unsafe.Coerce (unsafeCoerce)
 
 class FromSexp t where
   fromSexp :: Sexp -> Maybe t
@@ -33,12 +35,18 @@ instance fromSexpMaybe :: FromSexp t => FromSexp (Maybe t) where
     List [e] -> Just <$> fromSexp e
     List []  -> Just Nothing
     _        -> Nothing
-    
+
+todo :: ∀ a. a
+todo = unsafeCoerce unit
+
+instance fromSexpTuple :: (FromSexp a, FromSexp b) => FromSexp (Tuple a b) where
+  fromSexp = todo
+
 instance fromSexpList :: FromSexp t => FromSexp (List t) where
   fromSexp = case _ of
     List l -> fromFoldable <$> traverse fromSexp l
     _      -> Nothing
-    
+
 
 instance fromSexpString :: FromSexp String where
   fromSexp = fromAtom Just
