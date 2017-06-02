@@ -15,7 +15,7 @@ import Data.Traversable (for, for_)
 import Halogen.Component (ComponentHTML, ComponentDSL)
 import Ports.Sexp (jsonParseArray, sexp)
 import SerAPI.Answer (Answer)
-import SerAPI.Command (Command)
+import SerAPI.Command (Command, CommandTag, TaggedCommand(..), tagOf)
 import SerAPI.Command.ToSexp (toSexp)
 import SerAPI.Feedback (Feedback)
 import SerAPI.FromSexp (fromSexp)
@@ -25,17 +25,18 @@ type SerAPIEffects e =
   , console :: CONSOLE
   | e)
 
-type Input =
-  {}
+type Input = {}
+
+type CommandId = Int
 
 type State =
-  { commandCounter :: Int
-  , lastCommand    :: Maybe Command
+  { nextCommandTag  :: CommandTag
+  , lastCommandSent :: Maybe TaggedCommand
   }
 
 data Query a
   = Ping         a
-  | Send Command a
+  | Send Command (CommandId -> a)
 
 data Message
   = Answer Answer
@@ -47,10 +48,10 @@ instance showMessage :: Show Message where
   show = gShow
 
 render :: State -> ComponentHTML Query
-render { lastCommand } =
+render { lastCommandSent } =
   HH.div_
   [ HH.text $ fold [ "SerAPI is loaded, last command: "
-                   , fromMaybe "no command sent yet" (toSexp <$> lastCommand)
+                   , fromMaybe "no command sent yet" (toSexp <$> lastCommandSent)
                    ]
   ]
 
@@ -73,8 +74,10 @@ readList = jsonParseArray
 ping :: ∀ e m. MonadAff (SerAPIEffects e) m => DSL m (AX.AffjaxResponse String)
 ping = H.liftAff $ affjaxSerAPI "ping" Nothing
 
-send :: ∀ e m. MonadAff (SerAPIEffects e) m => Command -> DSL m (AX.AffjaxResponse String)
-send = H.liftAff <<< affjaxSerAPI "coqtop" <<< Just <<< toSexp
+send :: ∀ e m. MonadAff (SerAPIEffects e) m => TaggedCommand -> DSL m (AX.AffjaxResponse String)
+send tcmd = do
+  H.modify (_ { lastCommandSent = Just tcmd })
+  H.liftAff <<< affjaxSerAPI "coqtop" <<< Just <<< toSexp $ tcmd
 
 serAPIOutput :: String -> Maybe Message
 serAPIOutput o = do
@@ -84,17 +87,29 @@ serAPIOutput o = do
     , Feedback <$> fromSexp s
     ]
 
-handleResponse :: ∀ e m. MonadAff (SerAPIEffects e) m => AX.AffjaxResponse String -> m Unit
+handleResponse :: ∀ e m. MonadAff (SerAPIEffects e) m => AX.AffjaxResponse String -> DSL m Unit
 handleResponse r = do
   for_ (jsonParseArray r.response) \ responses -> do
     for responses \ response -> do
       case serAPIOutput response of
         Just m -> do
+          H.raise m
           --H.liftEff $ log $ "Correctly read message: " <> show m
           pure unit
         Nothing -> do
           H.liftEff $ log $ "Could not decode: " <> (show $ sexp response)
-    
+
+newCommandTag :: ∀ m. DSL m CommandTag
+newCommandTag = do
+  t <- H.gets _.nextCommandTag
+  H.modify (_ { nextCommandTag = t + 1 })
+  pure t
+
+tagCommand :: ∀ m. Command -> DSL m TaggedCommand
+tagCommand cmd = do
+  tag <- newCommandTag
+  pure $ TaggedCommand tag cmd
+
 eval :: ∀ e m. MonadAff (SerAPIEffects e) m => Query ~> DSL m
 eval = case _ of
 
@@ -103,16 +118,16 @@ eval = case _ of
     pure next
 
   Send cmd next -> do
-    H.liftEff $ log $ "SerAPI: sending command" <> toSexp cmd
-    H.modify (_ { lastCommand = Just cmd })
-    send cmd >>= handleResponse
-    pure next
+    tcmd <- tagCommand cmd
+    H.liftEff $ log $ "SerAPI: sending command" <> toSexp tcmd
+    send tcmd >>= handleResponse
+    pure $ next $ tagOf tcmd
 
 serAPIComponent ::
   ∀ e m. MonadAff (SerAPIEffects e) m => H.Component HH.HTML Query Input Message m
 serAPIComponent = H.lifecycleComponent
-  { initialState : const { commandCounter : 0
-                         , lastCommand : Nothing
+  { initialState : const { nextCommandTag  : 0
+                         , lastCommandSent : Nothing
                          }
   , render
   , eval

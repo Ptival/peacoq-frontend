@@ -26,7 +26,7 @@ instance fromSexpLevel :: FromSexp Level where
     Atom "Notice"  -> Just Notice
     Atom "Warning" -> Just Warning
     Atom "Error"   -> Just Error
-    _         -> Nothing
+    _              -> Nothing
 
 data FeedbackContent
   = Processed

@@ -1,9 +1,9 @@
 module Main where
 
 import Prelude
+import CodeMirror.Component as CM
 import Halogen as H
 import Halogen.Aff as HA
-import CodeMirror.Component as CM
 import SerAPI.Component as SAPI
 import Control.Coroutine (Consumer, consumer)
 import Control.Monad.Aff.Console (CONSOLE)
@@ -14,7 +14,7 @@ import Data.Traversable (traverse_)
 import Halogen.Aff.Util (selectElement)
 import Halogen.VDom.Driver (runUI)
 import Network.HTTP.Affjax (AJAX)
-import SerAPI.Command (Command(..))
+import SerAPI.Command (Command(..), CommandTag)
 import SerAPI.Command.Control (Control(..), defaultAddOptions)
 
 type AppEffects =
@@ -22,13 +22,13 @@ type AppEffects =
   , console :: CONSOLE
   )
 
-stmAdd :: String -> SAPI.Query Unit
-stmAdd s = H.action $ SAPI.Send $ Control $ StmAdd { addOptions : defaultAddOptions
-                                                   , sentence   : s
-                                                   }
+stmAdd :: String -> SAPI.Query CommandTag
+stmAdd s = H.request $ SAPI.Send $ Control $ StmAdd { addOptions : defaultAddOptions
+                                                    , sentence   : s
+                                                    }
 
-stmQuit :: SAPI.Query Unit
-stmQuit = H.action $ SAPI.Send $ Control $ Quit
+stmQuit :: SAPI.Query CommandTag
+stmQuit = H.request $ SAPI.Send $ Control $ Quit
 
 ping :: SAPI.Query Unit
 ping = H.action SAPI.Ping
@@ -36,7 +36,7 @@ ping = H.action SAPI.Ping
 consumeCM :: forall m o. Monad m => H.HalogenIO SAPI.Query o m -> Consumer CM.Message m Unit
 consumeCM sapi = consumer $ case _ of
   CM.Sentence id sentence -> do
-    sapi.query $ stmAdd sentence
+    addTag <- sapi.query $ stmAdd sentence
     pure Nothing
 
 consumeSAPI :: forall m o. Monad m => H.HalogenIO CM.Query o m -> Consumer SAPI.Message m Unit
@@ -45,6 +45,7 @@ consumeSAPI cm = consumer $ case _ of
     -- TODO
     pure Nothing
   SAPI.Feedback f -> do
+    
     -- TODO
     pure Nothing
 
@@ -58,7 +59,7 @@ main = HA.runHalogenAff do
     sapi.subscribe $ consumeSAPI cm
 
     sapi.query $ ping
-    sapi.query $ stmQuit
+    _ <- sapi.query $ stmQuit
     sapi.query $ ping
 
     pure unit
