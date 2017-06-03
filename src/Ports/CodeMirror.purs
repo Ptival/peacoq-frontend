@@ -1,20 +1,20 @@
 module Ports.CodeMirror where
 
 import Prelude
+import Control.Monad.Eff.Uncurried as EU
 import CodeMirror.Position (Position)
 import Control.Monad.Eff (Eff)
 import DOM.HTML.Types (HTMLElement)
 import Data.Foreign (Foreign)
-import Data.Function.Uncurried as FU
 import Data.Maybe (Maybe(..))
 import Data.Nullable (Nullable, toNullable)
-import Data.Options (Options, options)
+import Data.Options (opt, options, (:=))
 
 type KeyMap = {}
 
 type RawConfiguration =
   { autofocus     :: Nullable Boolean
-  , extraKeys     :: Nullable Foreign
+  --, extraKeys     :: Nullable Foreign
   , lineNumbers   :: Nullable Boolean
   , lineSeparator :: Nullable String
   , mode          :: Nullable String
@@ -23,7 +23,7 @@ type RawConfiguration =
 
 type Configuration =
   { autofocus     :: Maybe Boolean
-  , extraKeys     :: Maybe (Options KeyMap)
+  --, extraKeys     :: Maybe (Options KeyMap)
   , lineNumbers   :: Maybe Boolean
   , lineSeparator :: Maybe String
   , mode          :: Maybe String
@@ -33,7 +33,7 @@ type Configuration =
 toRawConfiguration :: Configuration -> RawConfiguration
 toRawConfiguration c =
   { autofocus     : toNullable c.autofocus
-  , extraKeys     : toNullable (options <$> c.extraKeys)
+  --, extraKeys     : toNullable (options <$> c.extraKeys)
   , lineNumbers   : toNullable c.lineNumbers
   , lineSeparator : toNullable c.lineSeparator
   , mode          : toNullable c.mode
@@ -43,7 +43,7 @@ toRawConfiguration c =
 defaultConfiguration :: Configuration
 defaultConfiguration =
   { autofocus     : Nothing
-  , extraKeys     : Nothing
+  -- , extraKeys     : Nothing
   , lineNumbers   : Nothing
   , lineSeparator : Nothing
   , mode          : Nothing
@@ -58,26 +58,30 @@ data CodeMirror
 data Doc
 data TextMarker
 
-foreign import _codeMirror :: ∀ e. FU.Fn2 HTMLElement RawConfiguration (Eff e CodeMirror)
+foreign import _addKeyMap :: ∀ e. EU.EffFn3 e CodeMirror Foreign Boolean Unit
+addKeyMap :: ∀ e. CodeMirror -> String -> Boolean -> (Unit -> Eff e Unit) -> Eff e Unit
+addKeyMap cm key b k = EU.runEffFn3 _addKeyMap cm (options (opt key := EU.mkEffFn1 k)) b
+
+foreign import _codeMirror :: ∀ e. EU.EffFn2 e HTMLElement RawConfiguration CodeMirror
 codeMirror :: ∀ e. HTMLElement -> Configuration -> Eff e CodeMirror
-codeMirror e c = FU.runFn2 _codeMirror e (toRawConfiguration c)
+codeMirror e c = EU.runEffFn2 _codeMirror e (toRawConfiguration c)
 
-foreign import _getDoc :: ∀ e. FU.Fn1 CodeMirror (Eff e Doc)
+foreign import _getDoc :: ∀ e. EU.EffFn1 e CodeMirror Doc
 getDoc :: ∀ e. CodeMirror -> Eff e Doc
-getDoc = FU.runFn1 _getDoc
+getDoc = EU.runEffFn1 _getDoc
 
-foreign import _getValue :: ∀ e. FU.Fn2 Doc (Nullable String) (Eff e String)
+foreign import _getValue :: ∀ e. EU.EffFn2 e Doc (Nullable String) String
 getValue :: ∀ e. Doc -> Maybe String -> Eff e String
-getValue d m = FU.runFn2 _getValue d (toNullable m)
+getValue d m = EU.runEffFn2 _getValue d (toNullable m)
 
-foreign import _hasFocus :: ∀ e. FU.Fn1 CodeMirror (Eff e Boolean)
+foreign import _hasFocus :: ∀ e. EU.EffFn1 e CodeMirror Boolean
 hasFocus :: ∀ e. CodeMirror -> Eff e Boolean
-hasFocus = FU.runFn1 _hasFocus
+hasFocus = EU.runEffFn1 _hasFocus
 
 foreign import _markText ::
-  ∀ e. FU.Fn4 Doc Position Position (Nullable TextMarkerOptions) (Eff e TextMarker)
+  ∀ e. EU.EffFn4 e Doc Position Position (Nullable TextMarkerOptions) TextMarker
 markText :: ∀ e. Doc -> Position -> Position -> Maybe TextMarkerOptions -> Eff e TextMarker
-markText d p1 p2 m = FU.runFn4 _markText d p1 p2 (toNullable m)
+markText d p1 p2 m = EU.runEffFn4 _markText d p1 p2 (toNullable m)
 
 type ChangeObj =
   { from    :: Position
@@ -92,8 +96,6 @@ type CodeMirrorChange =
   , changeObj :: ChangeObj
   }
 
-foreign import _onCodeMirrorChange ::
-  ∀ e. FU.Fn2 CodeMirror (CodeMirrorChange -> Eff e Unit) (Eff e Unit)
-
+foreign import _onCodeMirrorChange :: ∀ e. EU.EffFn2 e CodeMirror (CodeMirrorChange -> Eff e Unit) Unit
 onCodeMirrorChange :: ∀ e. CodeMirror -> (CodeMirrorChange -> Eff e Unit) -> Eff e Unit
-onCodeMirrorChange cm h = FU.runFn2 _onCodeMirrorChange cm h
+onCodeMirrorChange cm h = EU.runEffFn2 _onCodeMirrorChange cm h

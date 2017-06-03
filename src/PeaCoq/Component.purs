@@ -14,15 +14,14 @@ import Data.Foldable (fold)
 import Data.Functor.Coproduct.Nested (Coproduct2)
 import Data.Lens (lens, over, view)
 import Data.Lens.Types (Lens')
-import Data.Lens.Zoom (zoom)
-import Data.Map (Map, empty, insert, lookup, toUnfoldable)
+import Data.Map (Map, empty, insert, lookup)
 import Data.Maybe (Maybe(..))
 import Data.Traversable (traverse_)
 import Data.Tuple (Tuple(..))
 import Halogen.Component.ChildPath (ChildPath, cp1, cp2)
 import Network.HTTP.Affjax (AJAX)
 import SerAPI.Answer (Answer(..))
-import SerAPI.Command (Command(..), CommandTag, tagOf)
+import SerAPI.Command (Command(Control), CommandTag)
 import SerAPI.Command.Control (Control(..), defaultAddOptions)
 import SerAPI.Feedback (Feedback)
 
@@ -78,7 +77,8 @@ renderTagToMarker (Tuple commandTag markerId) =
 render :: ∀ m e. MonadAff (PeaCoqEffects e) m => State -> Render m
 render state =
   HH.div_ (
-    (renderTagToMarker <$> toUnfoldable state.tagToMarker)
+    -- (renderTagToMarker <$> toUnfoldable state.tagToMarker)
+    []
     <> [ HH.slot' sapiSlot unit SAPI.serAPIComponent   unit                   handleSerAPI
        , HH.slot' cmSlot   unit CM.codeMirrorComponent { code : initialCode } handleCodeMirror
        ]

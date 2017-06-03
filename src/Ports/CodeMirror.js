@@ -23,6 +23,15 @@ function effizeM(m) {
     }
 }
 
+// EffFn-ize a method, takes as input the method name (as a string)
+function effFnM(m) {
+    return function () {
+        const me = arguments[0]
+        const args = Array.prototype.slice.call(arguments, 1)
+        return me[m].apply(me, args)
+    }
+}
+
 function on(eventType, kArgs) {
     return function(self, callback) {
         return function() {
@@ -42,8 +51,10 @@ function on(eventType, kArgs) {
 
 exports._onCodeMirrorChange = on("change", ["instance", "changeObj"])
 
-exports._codeMirror = effizeF(CodeMirror)
-exports._getDoc     = effizeM("getDoc")
-exports._getValue   = effizeM("getValue")
-exports._hasFocus   = effizeM("hasFocus")
-exports._markText   = effizeM("markText")
+exports._codeMirror = CodeMirror
+
+exports._addKeyMap  = effFnM("addKeyMap")
+exports._getDoc     = effFnM("getDoc")
+exports._getValue   = effFnM("getValue")
+exports._hasFocus   = effFnM("hasFocus")
+exports._markText   = effFnM("markText")

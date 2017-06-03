@@ -18,8 +18,7 @@ import Control.Monad.State.Class (class MonadState, gets, modify)
 import Coq.Position (nextSentence)
 import Data.Array (fromFoldable)
 import Data.Maybe (Maybe(..))
-import Data.Options (Options, opt, (:=))
-import Data.Traversable (traverse, traverse_)
+import Data.Traversable (for_, traverse, traverse_)
 import Halogen.HTML.CSS (style)
 import Halogen.Query (RefLabel(..))
 import Stage (Stage(..))
@@ -54,9 +53,9 @@ initialState { code } =
 
 data Query a
   = AddMarker    a
-  | HandleChange PCM.CodeMirrorChange (H.SubscribeStatus -> a)
-  | HandleKey    a
   | Init         a
+  | HandleChange PCM.CodeMirrorChange (H.SubscribeStatus -> a)
+  | HandleKey    KeyCombination       (H.SubscribeStatus -> a)
 
 data Message
   = Sentence TextMarkerId String
@@ -64,11 +63,11 @@ data Message
 addMarker :: ∀ m. MonadState State m => Position -> Position -> String -> m TextMarker
 addMarker from to sentence = do
   nextMarkerId <- gets _.nextMarkerId
-  let newMarker = { id    : nextMarkerId
+  let newMarker = { id       : nextMarkerId
                   , from
                   , to
                   , sentence
-                  , stage : ToProcess
+                  , stage    : ToProcess
                   }
   modify (\ s -> s { nextMarkerId = nextMarkerId + 1
                    , markers      = Map.insert newMarker.id newMarker s.markers
@@ -89,9 +88,14 @@ nextMarker = do
 renderMarker :: TextMarker -> H.ComponentHTML Query
 renderMarker { id, stage } =
   HH.div
-  [ style $ do
-       CSS.width  $ CSS.fromString "100%"
-       CSS.height $ CSS.fromString "20px"
+  [ HP.title $ show id
+  , style $ do
+      CSS.width  $ CSS.fromString "100%"
+      CSS.height $ CSS.fromString "20px"
+      CSS.backgroundColor $ case stage of
+        ToProcess  -> CSS.dodgerblue
+        Processing -> CSS.darkorange
+        Processed  -> CSS.forestgreen
   ]
   [ HH.text (show id) ]
 
@@ -123,6 +127,21 @@ render { code, cursorPosition, markers, tip } =
 
 type DSL = H.ComponentDSL State Query Message
 
+data KeyCombination
+  = CtrlAltDown
+  | CtrlAltUp
+
+type KeyBinding = { key :: KeyCombination, keyS :: String }
+
+bindKey :: KeyCombination -> String -> KeyBinding
+bindKey key keyS = { key, keyS }
+
+keyBindings :: Array KeyBinding
+keyBindings =
+  [ bindKey CtrlAltDown "Ctrl-Alt-Down"
+  , bindKey CtrlAltUp   "Ctrl-Alt-Up"
+  ]
+
 eval :: ∀ e m. MonadAff (CodeMirrorEffects e) m => Query ~> DSL m
 eval = case _ of
 
@@ -143,14 +162,15 @@ eval = case _ of
       cm <- H.liftEff do
         PCM.codeMirror element
           (PCM.defaultConfiguration { autofocus   = Just true
-                                    , extraKeys   = Just keyMap
                                     , lineNumbers = Just true
                                     , mode        = Just "text/x-ocaml"
                                     , value       = Just code
                                     }
           )
       H.modify (_ { codeMirror = Just cm })
-      H.subscribe $ H.eventSource (PCM.onCodeMirrorChange cm) (Just <<< H.request <<< HandleChange)
+      H.subscribe $ H.eventSource (PCM.onCodeMirrorChange cm)              (Just <<< H.request <<< HandleChange)
+      for_ keyBindings \ { key, keyS } -> do
+        H.subscribe $ H.eventSource (PCM.addKeyMap cm keyS false) (Just <<< H.request <<< const (HandleKey key))
     pure next
 
   HandleChange change k -> do
@@ -162,14 +182,13 @@ eval = case _ of
       H.modify (_ { code = code })
     pure $ k H.Listening
 
-  HandleKey next -> do
-    H.liftEff $ log "Handle key handler called"
-    pure next
-
-  where
-    keyMap :: Options PCM.KeyMap
-    keyMap =
-      opt "Ctrl-Alt-Down" := log "yolo"
+  HandleKey u k -> do
+    case u of
+      CtrlAltDown -> do
+        H.liftEff $ log "On Ctrl Alt Down"
+      CtrlAltUp -> do
+        H.liftEff $ log "On Ctrl Alt Up"
+    pure $ k H.Listening
 
 codeMirrorComponent ::
   ∀ e m. MonadAff (CodeMirrorEffects e) m => H.Component HH.HTML Query Input Message m
