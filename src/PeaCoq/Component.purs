@@ -10,15 +10,19 @@ import Control.Monad.Aff.AVar (AVAR)
 import Control.Monad.Aff.Class (class MonadAff)
 import Control.Monad.Aff.Console (CONSOLE)
 import Data.Either.Nested (Either2)
+import Data.Foldable (fold)
 import Data.Functor.Coproduct.Nested (Coproduct2)
-import Data.Lens (lens, over)
+import Data.Lens (lens, over, view)
 import Data.Lens.Types (Lens')
-import Data.Map (Map, empty, insert)
+import Data.Lens.Zoom (zoom)
+import Data.Map (Map, empty, insert, lookup, toUnfoldable)
 import Data.Maybe (Maybe(..))
+import Data.Traversable (traverse_)
+import Data.Tuple (Tuple(..))
 import Halogen.Component.ChildPath (ChildPath, cp1, cp2)
 import Network.HTTP.Affjax (AJAX)
-import SerAPI.Answer (Answer)
-import SerAPI.Command (Command(..), CommandTag)
+import SerAPI.Answer (Answer(..))
+import SerAPI.Command (Command(..), CommandTag, tagOf)
 import SerAPI.Command.Control (Control(..), defaultAddOptions)
 import SerAPI.Feedback (Feedback)
 
@@ -64,12 +68,21 @@ type PeaCoqEffects e =
   , console :: CONSOLE
   | e)
 
-render :: ∀ m e. MonadAff (PeaCoqEffects e) m => State -> H.ParentHTML Query ChildQuery Slot m
+type Render m = H.ParentHTML Query ChildQuery Slot m
+
+renderTagToMarker :: ∀ m. Tuple CommandTag TextMarkerId -> Render m
+renderTagToMarker (Tuple commandTag markerId) =
+  HH.li_ [ HH.text $ fold [ "(", show commandTag, " : ", show markerId, ")" ]
+         ]
+
+render :: ∀ m e. MonadAff (PeaCoqEffects e) m => State -> Render m
 render state =
-  HH.div_
-    [ HH.slot' sapiSlot unit SAPI.serAPIComponent   unit                   handleSerAPI
-    , HH.slot' cmSlot   unit CM.codeMirrorComponent { code : initialCode } handleCodeMirror
-    ]
+  HH.div_ (
+    (renderTagToMarker <$> toUnfoldable state.tagToMarker)
+    <> [ HH.slot' sapiSlot unit SAPI.serAPIComponent   unit                   handleSerAPI
+       , HH.slot' cmSlot   unit CM.codeMirrorComponent { code : initialCode } handleCodeMirror
+       ]
+    )
 
 stmAdd :: String -> SAPI.Query CommandTag
 stmAdd s = H.request $ SAPI.Send $ Control $ StmAdd { addOptions : defaultAddOptions
@@ -85,14 +98,13 @@ ping = H.action SAPI.Ping
 eval :: ∀ m. Query ~> H.ParentDSL State Query ChildQuery Slot Message m
 eval = case _ of
   CodeMirrorSentence markerId sentence next -> do
-    mAddTag <- H.query' sapiSlot unit $ stmAdd sentence
-    _ <- case mAddTag of
-      Nothing -> pure unit
-      Just addTag -> do
-        H.modify (over _tagToMarker $ insert addTag markerId)
+    H.query' sapiSlot unit (stmAdd sentence) >>= traverse_ \ addTag ->
+      H.modify $ over _tagToMarker $ insert addTag markerId
     pure next
-  SAPIAnswer a next -> do
-    -- TODO
+  SAPIAnswer (Answer tag a) next -> do
+    H.gets (view _tagToMarker >>> lookup tag) >>= traverse_ \ markerId -> do
+      -- TODO
+      pure unit
     pure next
   SAPIFeedback f next -> do
     -- TODO

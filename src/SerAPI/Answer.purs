@@ -5,6 +5,7 @@ import Data.Generic (class Generic, gShow)
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple)
 import Ports.Sexp (Sexp(..))
+import SerAPI.Command (CommandTag)
 import SerAPI.FromSexp (class FromSexp, fromSexp)
 import SerAPI.Types (CoqObject, Exn, Loc, StateId)
 
@@ -54,7 +55,7 @@ instance fromSexpAnswerKind :: FromSexp AnswerKind where
       pure $ CoqExn m1 m2 e
     _ -> Nothing
 
-data Answer = Answer Int AnswerKind
+data Answer = Answer CommandTag AnswerKind
 
 derive instance genericAnswer :: Generic Answer
 
@@ -65,3 +66,6 @@ instance fromSexpAnswer :: FromSexp Answer where
       kind <- fromSexp skind
       pure $ Answer id kind
     _ -> Nothing
+
+tagOf :: Answer -> CommandTag
+tagOf (Answer tag _) = tag

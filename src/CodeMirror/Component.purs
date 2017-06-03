@@ -1,13 +1,14 @@
 module CodeMirror.Component where
 
 import Prelude
+import CSS as CSS
+import CSS.Display as CSSD
 import Data.Map as Map
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
-import CSS (fromString, width)
-import CSS.Display (float, floatLeft)
+import Ports.CodeMirror as PCM
 import CodeMirror.Position (Position, initialPosition)
 import CodeMirror.TextMarker (TextMarkerId, TextMarker)
 import Control.Monad.Aff.AVar (AVAR)
@@ -15,12 +16,12 @@ import Control.Monad.Aff.Class (class MonadAff)
 import Control.Monad.Eff.Console (CONSOLE, log)
 import Control.Monad.State.Class (class MonadState, gets, modify)
 import Coq.Position (nextSentence)
+import Data.Array (fromFoldable)
 import Data.Maybe (Maybe(..))
 import Data.Options (Options, opt, (:=))
 import Data.Traversable (traverse, traverse_)
 import Halogen.HTML.CSS (style)
 import Halogen.Query (RefLabel(..))
-import Ports.CodeMirror as PCM
 import Stage (Stage(..))
 
 type CodeMirrorEffects e =
@@ -85,24 +86,37 @@ nextMarker = do
     modify (\ s -> s { tip = newMarker.to })
     pure newMarker
 
+renderMarker :: TextMarker -> H.ComponentHTML Query
+renderMarker { id, stage } =
+  HH.div
+  [ style $ do
+       CSS.width  $ CSS.fromString "100%"
+       CSS.height $ CSS.fromString "20px"
+  ]
+  [ HH.text (show id) ]
+
 render :: State -> H.ComponentHTML Query
 render { code, cursorPosition, markers, tip } =
-  let { line, ch } = cursorPosition in
   HH.div_
-    [ HH.button [ HE.onClick $ HE.input_ AddMarker ]
+    [ HH.div
+      [ style $ do
+           CSS.display CSS.flex
+      ]
+      (fromFoldable $ renderMarker <$> Map.values markers)
+    , HH.button [ HE.onClick $ HE.input_ AddMarker ]
                 [ HH.text "+" ]
-    , HH.p_ [ HH.text ("Line is: " <> show line)]
+    , HH.p_ [ HH.text ("Line is: " <> show cursorPosition.line)]
     , HH.div
         [ HP.ref (RefLabel "codemirror")
         , style do
-            float floatLeft
-            width $ fromString "50%"
+            CSSD.float CSSD.floatLeft
+            CSS.width $ CSS.fromString "50%"
         ]
         []
     , HH.pre
         [ style do
-            float floatLeft
-            width $ fromString "50%"
+            CSSD.float CSSD.floatLeft
+            CSS.width $ CSS.fromString "50%"
         ]
         [ HH.text code ]
     ]
