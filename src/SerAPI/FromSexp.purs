@@ -6,7 +6,7 @@ import Data.List (List, fromFoldable)
 import Data.Maybe (Maybe(..))
 import Data.String (Pattern(Pattern), stripPrefix, stripSuffix)
 import Data.Traversable (traverse)
-import Data.Tuple (Tuple)
+import Data.Tuple (Tuple(..))
 import Ports.Sexp (Sexp(..))
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -40,7 +40,12 @@ todo :: ∀ a. a
 todo = unsafeCoerce unit
 
 instance fromSexpTuple :: (FromSexp a, FromSexp b) => FromSexp (Tuple a b) where
-  fromSexp = todo
+  fromSexp = case _ of
+    List [ sa, sb ] -> do
+      a <- fromSexp sa
+      b <- fromSexp sb
+      pure $ Tuple a b
+    _ -> Nothing
 
 instance fromSexpList :: FromSexp t => FromSexp (List t) where
   fromSexp = case _ of

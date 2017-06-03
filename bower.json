@@ -24,7 +24,8 @@
     "purescript-coroutines": "^4.0.0",
     "purescript-unicode": "^3.0.1",
     "purescript-psci-support": "^3.0.0",
-    "purescript-affjax": "^4.0.0"
+    "purescript-affjax": "^4.0.0",
+    "purescript-nullable": "^3.0.0"
   },
   "devDependencies": {
     "purescript-psci-support": "^3.0.0",

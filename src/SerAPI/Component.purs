@@ -94,7 +94,7 @@ handleResponse r = do
       case serAPIOutput response of
         Just m -> do
           H.raise m
-          --H.liftEff $ log $ "Correctly read message: " <> show m
+          -- H.liftEff $ log $ "Correctly read message: " <> show m
           pure unit
         Nothing -> do
           H.liftEff $ log $ "Could not decode: " <> (show $ sexp response)

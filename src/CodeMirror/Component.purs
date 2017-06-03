@@ -9,6 +9,8 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Ports.CodeMirror as PCM
+import Ports.CodeMirror.Configuration as CFG
+import Ports.CodeMirror.TextMarkerOptions as TMO
 import CodeMirror.Position (Position, initialPosition)
 import CodeMirror.TextMarker (TextMarkerId, TextMarker)
 import Control.Monad.Aff.AVar (AVAR)
@@ -17,11 +19,12 @@ import Control.Monad.Eff.Console (CONSOLE, log)
 import Control.Monad.State.Class (class MonadState, gets, modify)
 import Coq.Position (nextSentence)
 import Data.Array (fromFoldable)
+import Data.List (fold)
 import Data.Maybe (Maybe(..))
 import Data.Traversable (for_, traverse, traverse_)
 import Halogen.HTML.CSS (style)
 import Halogen.Query (RefLabel(..))
-import Stage (Stage(..))
+import Stage (Stage(..), stageColor)
 
 type CodeMirrorEffects e =
   ( avar    :: AVAR
@@ -38,7 +41,7 @@ type State =
   }
 
 type Input =
-  { code        :: String
+  { code :: String
   }
 
 initialState :: Input -> State
@@ -52,8 +55,10 @@ initialState { code } =
   }
 
 data Query a
-  = AddMarker    a
-  | Init         a
+  = Backward a
+  | Forward  a
+  | GoTo     a
+  | Init     a
   | HandleChange PCM.CodeMirrorChange (H.SubscribeStatus -> a)
   | HandleKey    KeyCombination       (H.SubscribeStatus -> a)
 
@@ -89,13 +94,10 @@ renderMarker :: TextMarker -> H.ComponentHTML Query
 renderMarker { id, stage } =
   HH.div
   [ HP.title $ show id
-  , style $ do
-      CSS.width  $ CSS.fromString "100%"
-      CSS.height $ CSS.fromString "20px"
-      CSS.backgroundColor $ case stage of
-        ToProcess  -> CSS.dodgerblue
-        Processing -> CSS.darkorange
-        Processed  -> CSS.forestgreen
+  , style do
+      CSS.width           $ CSS.fromString "100%"
+      CSS.height          $ CSS.fromString "20px"
+      CSS.backgroundColor $ stageColor stage
   ]
   [ HH.text (show id) ]
 
@@ -107,7 +109,7 @@ render { code, cursorPosition, markers, tip } =
            CSS.display CSS.flex
       ]
       (fromFoldable $ renderMarker <$> Map.values markers)
-    , HH.button [ HE.onClick $ HE.input_ AddMarker ]
+    , HH.button [ HE.onClick $ HE.input_ Forward ]
                 [ HH.text "+" ]
     , HH.p_ [ HH.text ("Line is: " <> show cursorPosition.line)]
     , HH.div
@@ -145,15 +147,26 @@ keyBindings =
 eval :: ∀ e m. MonadAff (CodeMirrorEffects e) m => Query ~> DSL m
 eval = case _ of
 
-  AddMarker next -> do
+  Backward next -> do
+    -- TODO
+    pure next
+
+  Forward next -> do
     nextMarker >>= traverse_ \ marker -> do
       gets _.codeMirror >>= traverse_ \ cm -> H.liftEff $ do
         doc <- PCM.getDoc cm
         let textMarkerOptions =
-              Just { className : "bgGreen"
-                   }
+              Just $ TMO.def { css       = Just $ fold [ "background-color: "
+                                                       , CSS.toHexString $ stageColor marker.stage
+                                                       ]
+                             , readOnly  = Just true
+                             }
         PCM.markText doc marker.from marker.to textMarkerOptions
       H.raise $ Sentence marker.id marker.sentence
+    pure next
+
+  GoTo next -> do
+    -- TODO
     pure next
 
   Init next -> do
@@ -161,34 +174,32 @@ eval = case _ of
     H.getHTMLElementRef (H.RefLabel "codemirror") >>= traverse_ \ element -> do
       cm <- H.liftEff do
         PCM.codeMirror element
-          (PCM.defaultConfiguration { autofocus   = Just true
-                                    , lineNumbers = Just true
-                                    , mode        = Just "text/x-ocaml"
-                                    , value       = Just code
-                                    }
+          (CFG.def { autofocus   = Just true
+                   , lineNumbers = Just true
+                   , mode        = Just "text/x-ocaml"
+                   , value       = Just code
+                   }
           )
       H.modify (_ { codeMirror = Just cm })
-      H.subscribe $ H.eventSource (PCM.onCodeMirrorChange cm)              (Just <<< H.request <<< HandleChange)
+      H.subscribe $ H.eventSource (PCM.onCodeMirrorChange cm) (Just <<< H.request <<< HandleChange)
       for_ keyBindings \ { key, keyS } -> do
         H.subscribe $ H.eventSource (PCM.addKeyMap cm keyS false) (Just <<< H.request <<< const (HandleKey key))
     pure next
 
-  HandleChange change k -> do
+  HandleChange change status -> do
     H.liftEff $ log $ "Change, removed: " <> change.changeObj.removed
     H.gets _.codeMirror >>= traverse_ \ cm -> do
       code <- H.liftEff $ do
         doc <- PCM.getDoc cm
         PCM.getValue doc Nothing
       H.modify (_ { code = code })
-    pure $ k H.Listening
+    pure $ status H.Listening
 
-  HandleKey u k -> do
+  HandleKey u status -> do
     case u of
-      CtrlAltDown -> do
-        H.liftEff $ log "On Ctrl Alt Down"
-      CtrlAltUp -> do
-        H.liftEff $ log "On Ctrl Alt Up"
-    pure $ k H.Listening
+      CtrlAltDown -> eval $ H.action Forward
+      CtrlAltUp   -> eval $ H.action Backward
+    pure $ status H.Listening
 
 codeMirrorComponent ::
   ∀ e m. MonadAff (CodeMirrorEffects e) m => H.Component HH.HTML Query Input Message m

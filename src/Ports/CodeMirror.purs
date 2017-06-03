@@ -2,57 +2,17 @@ module Ports.CodeMirror where
 
 import Prelude
 import Control.Monad.Eff.Uncurried as EU
+import Ports.CodeMirror.Configuration as CFG
+import Ports.CodeMirror.TextMarkerOptions as TMO
 import CodeMirror.Position (Position)
 import Control.Monad.Eff (Eff)
 import DOM.HTML.Types (HTMLElement)
 import Data.Foreign (Foreign)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe)
 import Data.Nullable (Nullable, toNullable)
 import Data.Options (opt, options, (:=))
 
 type KeyMap = {}
-
-type RawConfiguration =
-  { autofocus     :: Nullable Boolean
-  --, extraKeys     :: Nullable Foreign
-  , lineNumbers   :: Nullable Boolean
-  , lineSeparator :: Nullable String
-  , mode          :: Nullable String
-  , value         :: Nullable String
-  }
-
-type Configuration =
-  { autofocus     :: Maybe Boolean
-  --, extraKeys     :: Maybe (Options KeyMap)
-  , lineNumbers   :: Maybe Boolean
-  , lineSeparator :: Maybe String
-  , mode          :: Maybe String
-  , value         :: Maybe String
-  }
-
-toRawConfiguration :: Configuration -> RawConfiguration
-toRawConfiguration c =
-  { autofocus     : toNullable c.autofocus
-  --, extraKeys     : toNullable (options <$> c.extraKeys)
-  , lineNumbers   : toNullable c.lineNumbers
-  , lineSeparator : toNullable c.lineSeparator
-  , mode          : toNullable c.mode
-  , value         : toNullable c.value
-  }
-
-defaultConfiguration :: Configuration
-defaultConfiguration =
-  { autofocus     : Nothing
-  -- , extraKeys     : Nothing
-  , lineNumbers   : Nothing
-  , lineSeparator : Nothing
-  , mode          : Nothing
-  , value         : Nothing
-  }
-
-type TextMarkerOptions =
-  { className :: String
-  }
 
 data CodeMirror
 data Doc
@@ -62,9 +22,9 @@ foreign import _addKeyMap :: ∀ e. EU.EffFn3 e CodeMirror Foreign Boolean Unit
 addKeyMap :: ∀ e. CodeMirror -> String -> Boolean -> (Unit -> Eff e Unit) -> Eff e Unit
 addKeyMap cm key b k = EU.runEffFn3 _addKeyMap cm (options (opt key := EU.mkEffFn1 k)) b
 
-foreign import _codeMirror :: ∀ e. EU.EffFn2 e HTMLElement RawConfiguration CodeMirror
-codeMirror :: ∀ e. HTMLElement -> Configuration -> Eff e CodeMirror
-codeMirror e c = EU.runEffFn2 _codeMirror e (toRawConfiguration c)
+foreign import _codeMirror :: ∀ e. EU.EffFn2 e HTMLElement CFG.RawConfiguration CodeMirror
+codeMirror :: ∀ e. HTMLElement -> CFG.Configuration -> Eff e CodeMirror
+codeMirror e c = EU.runEffFn2 _codeMirror e (CFG.toRaw c)
 
 foreign import _getDoc :: ∀ e. EU.EffFn1 e CodeMirror Doc
 getDoc :: ∀ e. CodeMirror -> Eff e Doc
@@ -79,9 +39,9 @@ hasFocus :: ∀ e. CodeMirror -> Eff e Boolean
 hasFocus = EU.runEffFn1 _hasFocus
 
 foreign import _markText ::
-  ∀ e. EU.EffFn4 e Doc Position Position (Nullable TextMarkerOptions) TextMarker
-markText :: ∀ e. Doc -> Position -> Position -> Maybe TextMarkerOptions -> Eff e TextMarker
-markText d p1 p2 m = EU.runEffFn4 _markText d p1 p2 (toNullable m)
+  ∀ e. EU.EffFn4 e Doc Position Position (Nullable TMO.RawTextMarkerOptions) TextMarker
+markText :: ∀ e. Doc -> Position -> Position -> Maybe TMO.TextMarkerOptions -> Eff e TextMarker
+markText d p1 p2 m = EU.runEffFn4 _markText d p1 p2 (toNullable $ TMO.toRaw <$> m)
 
 type ChangeObj =
   { from    :: Position
