@@ -25,7 +25,7 @@ type SerAPIEffects e =
   , console :: CONSOLE
   | e)
 
-type Input = {}
+type Input = Unit
 
 type CommandId = Int
 
