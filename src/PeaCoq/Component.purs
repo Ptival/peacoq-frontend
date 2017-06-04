@@ -101,8 +101,9 @@ eval = case _ of
     H.query' sapiSlot unit (stmAdd sentence) >>= traverse_ \ addTag ->
       H.modify $ over _tagToMarker $ insert addTag markerId
     pure next
-  SAPIAnswer (Answer tag a) next -> do
+  SAPIAnswer (Answer tag answer) next -> do
     H.gets (view _tagToMarker >>> lookup tag) >>= traverse_ \ markerId -> do
+      _ <- H.query' cmSlot unit $ H.action $ CM.AnswerForMarker markerId answer
       -- TODO
       pure unit
     pure next

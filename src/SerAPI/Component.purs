@@ -119,7 +119,7 @@ eval = case _ of
 
   Send cmd next -> do
     tcmd <- tagCommand cmd
-    H.liftEff $ log $ "SerAPI: sending command" <> toSexp tcmd
+    -- H.liftEff $ log $ "SerAPI: sending command" <> toSexp tcmd
     send tcmd >>= handleResponse
     pure $ next $ tagOf tcmd
 

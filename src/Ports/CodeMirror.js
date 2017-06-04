@@ -32,7 +32,7 @@ function effFnM(m) {
     }
 }
 
-function on(eventType, kArgs) {
+function onFn(eventType, kArgs) {
     return function(self, callback) {
         return function() {
             return self.on(eventType, function() {
@@ -49,7 +49,22 @@ function on(eventType, kArgs) {
     }
 }
 
-exports._onCodeMirrorChange = on("change", ["instance", "changeObj"])
+function onEffFn(eventType, kArgs) {
+    return function(self, callback) {
+        return self.on(eventType, function() {
+            if (kArgs.length != arguments.length) {
+                throw "FFI problem: for " + eventType + ", wrong kArgs length"
+            }
+            const args = {}
+            for (var i in kArgs) {
+                args[kArgs[i]] = arguments[i]
+            }
+            callback(args)()
+        })
+    }
+}
+
+exports._onCodeMirrorChange = onEffFn("change", ["instance", "changeObj"])
 
 exports._codeMirror = CodeMirror
 

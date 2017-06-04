@@ -12,18 +12,21 @@ import Ports.CodeMirror as PCM
 import Ports.CodeMirror.Configuration as CFG
 import Ports.CodeMirror.TextMarkerOptions as TMO
 import CodeMirror.Position (Position, initialPosition)
-import CodeMirror.TextMarker (TextMarkerId, TextMarker)
+import CodeMirror.TextMarker (TextMarker, TextMarkerId)
 import Control.Monad.Aff.AVar (AVAR)
 import Control.Monad.Aff.Class (class MonadAff)
 import Control.Monad.Eff.Console (CONSOLE, log)
 import Control.Monad.State.Class (class MonadState, gets, modify)
 import Coq.Position (nextSentence)
 import Data.Array (fromFoldable)
+import Data.Lens (lens, over)
+import Data.Lens.Types (Lens')
 import Data.List (fold)
 import Data.Maybe (Maybe(..))
 import Data.Traversable (for_, traverse, traverse_)
 import Halogen.HTML.CSS (style)
 import Halogen.Query (RefLabel(..))
+import SerAPI.Answer (AnswerKind(Added))
 import Stage (Stage(..), stageColor)
 
 type CodeMirrorEffects e =
@@ -40,6 +43,9 @@ type State =
   , tip            :: Position
   }
 
+_markers :: Lens' State (Map.Map TextMarkerId TextMarker)
+_markers = lens _.markers (_ { markers = _ })
+
 type Input =
   { code :: String
   }
@@ -55,10 +61,11 @@ initialState { code } =
   }
 
 data Query a
-  = Backward a
-  | Forward  a
-  | GoTo     a
-  | Init     a
+  = AnswerForMarker TextMarkerId AnswerKind a
+  | Backward                                a
+  | Forward                                 a
+  | GoTo                                    a
+  | Init                                    a
   | HandleChange PCM.CodeMirrorChange (H.SubscribeStatus -> a)
   | HandleKey    KeyCombination       (H.SubscribeStatus -> a)
 
@@ -146,6 +153,17 @@ keyBindings =
 
 eval :: ∀ e m. MonadAff (CodeMirrorEffects e) m => Query ~> DSL m
 eval = case _ of
+
+  AnswerForMarker markerId answer next -> do
+    gets (_.markers >>> Map.lookup markerId) >>= traverse_ \ marker -> do
+      case answer of
+        Added sid loc added -> do
+          -- The marker should change stage from ToProcess to Processing
+          let newMarker = marker { stage = Processing sid }
+          H.modify $ over _markers $ Map.insert markerId newMarker
+        _ -> pure unit
+      pure unit
+    pure next
 
   Backward next -> do
     -- TODO
