@@ -15,7 +15,8 @@ import Data.Traversable (for, for_)
 import Halogen.Component (ComponentHTML, ComponentDSL)
 import Ports.Sexp (jsonParseArray, sexp)
 import SerAPI.Answer (Answer)
-import SerAPI.Command (Command, CommandTag, TaggedCommand(..), tagOf)
+import SerAPI.Command (Command(Control), CommandTag, TaggedCommand(TaggedCommand))
+import SerAPI.Command.Control (Control(..))
 import SerAPI.Command.ToSexp (toSexp)
 import SerAPI.Feedback (Feedback)
 import SerAPI.FromSexp (fromSexp)
@@ -35,8 +36,11 @@ type State =
   }
 
 data Query a
-  = Ping         a
-  | Send Command (CommandId -> a)
+  = Init               a
+  | Ping               a
+  | Reset              a
+  | Send TaggedCommand a
+  | TagCommand Command (TaggedCommand -> a)
 
 data Message
   = Answer Answer
@@ -113,15 +117,29 @@ tagCommand cmd = do
 eval :: ∀ e m. MonadAff (SerAPIEffects e) m => Query ~> DSL m
 eval = case _ of
 
-  Ping next -> do
-    ping >>= handleResponse
+  Init next -> do
+    eval $ H.action $ Reset
     pure next
 
-  Send cmd next -> do
+  Ping next -> do
+    -- H.liftEff $ log "Ping"
+    ping >>= handleResponse
+    -- H.liftEff $ log "Done ping"
+    pure next
+
+  TagCommand cmd next -> do
     tcmd <- tagCommand cmd
+    pure $ next $ tcmd
+
+  Reset next -> do
+    tcmd <- eval $ H.request $ TagCommand $ Control $ Quit
+    eval $ H.action $ Send $ tcmd
+    pure next
+
+  Send tcmd next -> do
     -- H.liftEff $ log $ "SerAPI: sending command" <> toSexp tcmd
     send tcmd >>= handleResponse
-    pure $ next $ tagOf tcmd
+    pure $ next
 
 serAPIComponent ::
   ∀ e m. MonadAff (SerAPIEffects e) m => H.Component HH.HTML Query Input Message m
@@ -132,6 +150,6 @@ serAPIComponent = H.lifecycleComponent
   , render
   , eval
   , receiver     : const Nothing
-  , initializer  : Nothing
+  , initializer  : Just $ H.action Init
   , finalizer    : Nothing
   }
