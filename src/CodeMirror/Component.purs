@@ -205,7 +205,7 @@ eval = case _ of
     pure next
 
   HandleChange change status -> do
-    H.liftEff $ log $ "Change, removed: " <> change.changeObj.removed
+    -- H.liftEff $ log $ "Change, removed: " <> change.changeObj.removed
     H.gets _.codeMirror >>= traverse_ \ cm -> do
       code <- H.liftEff $ do
         doc <- PCM.getDoc cm
