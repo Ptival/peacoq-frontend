@@ -5,6 +5,7 @@ import CSS.Display as CSSD
 import Control.Monad.Eff.Uncurried as EU
 import Ports.CodeMirror.Configuration as CFG
 import Ports.CodeMirror.TextMarkerOptions as TMO
+import Ports.CodeMirror.SetSelectionOptions as SSO
 import CodeMirror.Position (Position)
 import Control.Monad.Eff (Eff)
 import DOM.HTML.Types (HTMLElement)
@@ -59,6 +60,12 @@ foreign import _markText ::
   ∀ e. EU.EffFn4 e Doc Position Position (Nullable TMO.RawTextMarkerOptions) TextMarker
 markText :: ∀ e. Doc -> Position -> Position -> Maybe TMO.TextMarkerOptions -> Eff e TextMarker
 markText d p1 p2 m = EU.runEffFn4 _markText d p1 p2 (toNullable $ TMO.toRaw <$> m)
+
+foreign import _setCursor :: ∀ e. EU.EffFn3 e Doc Position (Nullable SSO.RawSetSelectionOptions) Unit
+setCursor :: ∀ e. Doc -> Position -> Maybe SSO.SetSelectionOptions -> Eff e Unit
+setCursor d p m = EU.runEffFn3 _setCursor d p (toNullable $ SSO.toRaw <$> m)
+
+-- | All the `on` stuff is down here
 
 type ChangeObj =
   { from    :: Position

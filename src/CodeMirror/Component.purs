@@ -30,16 +30,27 @@ import Halogen.Query (RefLabel(..))
 import SerAPI.Answer (AnswerKind(Added))
 import Stage (Stage(..), stageColor)
 
+type TextMarkerWithReference =
+  { marker    :: TextMarker
+  , reference :: PCM.TextMarker
+  }
+
+_marker :: Lens' TextMarkerWithReference TextMarker
+_marker = lens _.marker (_ { marker = _ })
+
+_reference :: Lens' TextMarkerWithReference PCM.TextMarker
+_reference = lens _.reference (_ { reference = _ })
+
 type State =
   { code           :: String
   , codeMirror     :: Maybe PCM.CodeMirror
   , cursorPosition :: Position
-  , markers        :: Map.Map TextMarkerId TextMarker
+  , markers        :: Map.Map TextMarkerId TextMarkerWithReference
   , nextMarkerId   :: TextMarkerId
   , tip            :: Position
   }
 
-_markers :: Lens' State (Map.Map TextMarkerId TextMarker)
+_markers :: Lens' State (Map.Map TextMarkerId TextMarkerWithReference)
 _markers = lens _.markers (_ { markers = _ })
 
 type Input =
@@ -78,9 +89,7 @@ addMarker from to sentence = do
                   , sentence
                   , stage    : ToProcess
                   }
-  modify (\ s -> s { nextMarkerId = nextMarkerId + 1
-                   , markers      = Map.insert newMarker.id newMarker s.markers
-                   })
+  modify (\ s -> s { nextMarkerId = nextMarkerId + 1 })
   pure newMarker
 
 nextTip :: State -> Maybe { position :: Position, sentence :: String }
@@ -112,7 +121,7 @@ render { code, cursorPosition, markers, tip } =
       [ style $ do
            CSS.display CSS.flex
       ]
-      (fromFoldable $ renderMarker <$> Map.values markers)
+      (fromFoldable $ (renderMarker <<< _.marker) <$> Map.values markers)
     , HH.button [ HE.onClick $ HE.input_ Forward ]
                 [ HH.text "+" ]
     , HH.p_ [ HH.text ("Line is: " <> show cursorPosition.line)]
@@ -155,18 +164,21 @@ type CodeMirrorEffects e =
   , console :: CONSOLE
   | e)
 
+updateMarker ::
+  ∀ e m. MonadAff (CodeMirrorEffects e) m =>
+  TextMarkerId -> (TextMarker -> TextMarker) -> DSL m Unit
+updateMarker markerId update = do
+  H.modify $ over _markers $ Map.update (Just <<< over _marker update) markerId
+
 eval :: ∀ e m. MonadAff (CodeMirrorEffects e) m => Query ~> DSL m
 eval = case _ of
 
   AnswerForMarker markerId answer next -> do
-    gets (_.markers >>> Map.lookup markerId) >>= traverse_ \ marker -> do
-      case answer of
-        Added sid loc added -> do
-          -- The marker should change stage from ToProcess to Processing
-          let newMarker = marker { stage = Processing sid }
-          H.modify $ over _markers $ Map.insert markerId newMarker
-        _ -> pure unit
-      pure unit
+    case answer of
+      Added sid loc added -> do
+        H.liftEff $ log "Marking Processing"
+        updateMarker markerId (_ { stage = Processing sid })
+      _                   -> pure unit
     pure next
 
   Backward next -> do
@@ -174,17 +186,20 @@ eval = case _ of
     pure next
 
   Forward next -> do
-    nextMarker >>= traverse_ \ marker -> do
-      gets _.codeMirror >>= traverse_ \ cm -> H.liftEff $ do
-        doc <- PCM.getDoc cm
-        let textMarkerOptions =
-              Just $ TMO.def { css       = Just $ fold [ "background-color: "
-                                                       , CSS.toHexString $ stageColor marker.stage
-                                                       ]
-                             , readOnly  = Just true
-                             }
-        PCM.markText doc marker.from marker.to textMarkerOptions
-      H.raise $ Sentence marker.id marker.sentence
+    gets _.codeMirror >>= traverse_ \ cm -> do
+      nextMarker >>= traverse_ \ marker -> do
+        reference <- H.liftEff $ do
+          doc <- PCM.getDoc cm
+          let textMarkerOptions =
+                Just $ TMO.def { css      = Just $ fold [ "background-color: "
+                                                        , CSS.toHexString $ stageColor marker.stage
+                                                        ]
+                               , readOnly = Just true
+                               }
+          PCM.setCursor doc marker.to Nothing
+          PCM.markText doc marker.from marker.to textMarkerOptions
+        H.modify $ over _markers $ Map.insert marker.id { marker, reference }
+        H.raise $ Sentence marker.id marker.sentence
     pure next
 
   GoTo next -> do
@@ -210,7 +225,10 @@ eval = case _ of
     pure next
 
   HandleCursorActivity o status -> do
-    H.liftEff $ log $ "Cursor moved"
+    pos <- H.liftEff $ do
+      doc          <- PCM.getDoc o.instance
+      PCM.getCursor doc Nothing
+    H.modify (_ { cursorPosition = pos })
     pure $ status H.Listening
 
   HandleChange change status -> do
