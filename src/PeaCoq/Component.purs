@@ -3,6 +3,7 @@ module PeaCoq.Component where
 import Prelude
 import CSS.Display as CSSD
 import CodeMirror.Component as CM
+import Data.Map as Map
 import Halogen as H
 import Halogen.HTML as HH
 import SerAPI.Component as SAPI
@@ -16,14 +17,13 @@ import Data.Foldable (fold)
 import Data.Functor.Coproduct.Nested (Coproduct2)
 import Data.Lens (lens, over, view)
 import Data.Lens.Types (Lens')
-import Data.Map (Map, empty, insert, keys, lookup)
 import Data.Maybe (Maybe(..))
 import Data.Traversable (traverse_)
 import Data.Tuple (Tuple(..))
 import Halogen.Component.ChildPath (ChildPath, cp1, cp2)
 import Halogen.HTML.CSS (style)
 import Network.HTTP.Affjax (AJAX)
-import SerAPI.Answer (Answer(..))
+import SerAPI.Answer (Answer(..), AnswerKind(..))
 import SerAPI.Command (Command(Control), CommandTag, TaggedCommand, tagOf)
 import SerAPI.Command.Control (Control(..), defaultAddOptions)
 import SerAPI.Feedback (Feedback)
@@ -38,10 +38,10 @@ data Query a
 type ChildQuery = Coproduct2 CM.Query SAPI.Query
 
 type State =
-  { tagToMarker :: Map CommandTag TextMarkerId
+  { tagToMarker :: Map.Map CommandTag TextMarkerId
   }
 
-_tagToMarker :: Lens' State (Map CommandTag TextMarkerId)
+_tagToMarker :: Lens' State (Map.Map CommandTag TextMarkerId)
 _tagToMarker = lens _.tagToMarker (_ { tagToMarker = _ })
 
 type Slot = Either2 Unit Unit
@@ -84,8 +84,8 @@ renderTagToMarker (Tuple commandTag markerId) =
 
 render :: ∀ m e. MonadAff (PeaCoqEffects e) m => State -> Render m
 render state =
-  HH.div_
-    --[ HH.div_ $ renderTagToMarker <$> toUnfoldable state.tagToMarker
+  HH.div_ $
+    -- [ HH.div_ $ renderTagToMarker <$> Map.toUnfoldable state.tagToMarker ] <>
     [ HH.slot' sapiSlot unit SAPI.serAPIComponent   unit                   handleSerAPI
     , HH.slot' cmSlot   unit CM.codeMirrorComponent { code : initialCode } handleCodeMirror
     ]
@@ -108,18 +108,24 @@ eval = case _ of
     -- IMPORTANT: make sure the state is modified to account for the addTag before calling stmAdd
     H.query' sapiSlot unit (stmAdd sentence) >>= traverse_ \ taggedCommand -> do
       -- first, save the mapping, so that when receiving the reply we know who it is
-      H.modify $ over _tagToMarker $ insert (tagOf taggedCommand) markerId
+      H.modify $ over _tagToMarker $ Map.insert (tagOf taggedCommand) markerId
       H.query' sapiSlot unit (H.action $ SAPI.Send taggedCommand)
     pure next
 
   SAPIAnswer (Answer tag answer) next -> do
-    H.liftEff $ log $ fold ["Received answer: ", show tag, ": ", show answer]
-    markers <- H.gets (_.tagToMarker >>> keys)
-    H.liftEff $ log $ fold ["Current known markers: ", show markers]
-    H.gets (view _tagToMarker >>> lookup tag) >>= traverse_ \ markerId -> do
+    -- H.liftEff $ log $ fold ["Received answer: ", show tag, ": ", show answer]
+    markers <- H.gets (_.tagToMarker >>> Map.keys)
+    -- H.liftEff $ log $ fold ["Current known markers: ", show markers]
+    H.gets (view _tagToMarker >>> Map.lookup tag) >>= traverse_ \ markerId -> do
       _ <- H.query' cmSlot unit $ H.action $ CM.AnswerForMarker markerId answer
       -- TODO
       pure unit
+    -- When an answer has completed, we can remove its tag from tagToMarker
+    case answer of
+      Completed -> do
+        -- H.liftEff $ log $ "Answer " <> show tag <> " has completed"
+        H.modify (over _tagToMarker $ Map.delete tag)
+      _ -> pure unit
     pure next
 
   SAPIFeedback f next -> do
@@ -133,7 +139,7 @@ eval = case _ of
 peaCoqComponent :: ∀ e m. MonadAff (PeaCoqEffects e) m => H.Component HH.HTML Query Input Message m
 peaCoqComponent =
   H.parentComponent
-    { initialState : const { tagToMarker : empty }
+    { initialState : const { tagToMarker : Map.empty }
     , render
     , eval
     , receiver     : const Nothing

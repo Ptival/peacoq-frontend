@@ -24,6 +24,10 @@ foreign import _addKeyMap :: ∀ e. EU.EffFn3 e CodeMirror Foreign Boolean Unit
 addKeyMap :: ∀ e. CodeMirror -> String -> Boolean -> (Unit -> Eff e Unit) -> Eff e Unit
 addKeyMap cm key b k = EU.runEffFn3 _addKeyMap cm (options (opt key := EU.mkEffFn1 k)) b
 
+foreign import _clearTextMarker :: ∀ e. EU.EffFn1 e TextMarker Unit
+clearTextMarker :: ∀ e. TextMarker -> Eff e Unit
+clearTextMarker = EU.runEffFn1 _clearTextMarker
+
 foreign import _codeMirror :: ∀ e. EU.EffFn2 e HTMLElement CFG.RawConfiguration CodeMirror
 codeMirror :: ∀ e. HTMLElement -> CFG.Configuration -> Eff e CodeMirror
 codeMirror e c = EU.runEffFn2 _codeMirror e (CFG.toRaw c)

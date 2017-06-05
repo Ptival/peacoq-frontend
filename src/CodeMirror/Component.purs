@@ -27,7 +27,7 @@ import Data.Maybe (Maybe(..))
 import Data.Traversable (for_, traverse, traverse_)
 import Halogen.HTML.CSS (style)
 import Halogen.Query (RefLabel(..))
-import SerAPI.Answer (AnswerKind(Added))
+import SerAPI.Answer (AnswerKind(..))
 import Stage (Stage(..), stageColor)
 
 type TextMarkerWithReference =
@@ -170,16 +170,33 @@ updateMarker ::
 updateMarker markerId update = do
   H.modify $ over _markers $ Map.update (Just <<< over _marker update) markerId
 
+-- | Hypothesis: we might not need to warn the parent component, because they only refer
+-- | to the markerId, so they will just silently ignore all subsequent messages for this marker
+-- | which is fine.
+deleteMarker :: ∀ e m. MonadAff (CodeMirrorEffects e) m => TextMarkerId -> DSL m Unit
+deleteMarker markerId = do
+  H.gets (_.markers >>> Map.lookup markerId) >>= traverse_ \ { marker, reference } -> do
+    H.liftEff $ PCM.clearTextMarker reference
+  H.modify (over _markers $ Map.delete markerId)
+
 eval :: ∀ e m. MonadAff (CodeMirrorEffects e) m => Query ~> DSL m
 eval = case _ of
 
-  AnswerForMarker markerId answer next -> do
+  AnswerForMarker markerId answer next ->
     case answer of
+
+      Ack -> pure next
+
       Added sid loc added -> do
         H.liftEff $ log "Marking Processing"
         updateMarker markerId (_ { stage = Processing sid })
-      _                   -> pure unit
-    pure next
+        pure next
+
+      Completed -> pure next
+
+      _ -> do
+        H.liftEff $ log $ "TODO: AnswerForMarker: " <> show answer
+        pure next
 
   Backward next -> do
     H.liftEff $ log $ "TODO: Backward"
