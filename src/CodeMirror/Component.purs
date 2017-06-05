@@ -20,8 +20,9 @@ import Control.Monad.Eff.Console (CONSOLE, log)
 import Control.Monad.State.Class (class MonadState, gets, modify)
 import Coq.Position (nextSentence)
 import Data.Array (fromFoldable)
-import Data.Lens (lens, over)
+import Data.Lens (lens, over, view)
 import Data.Lens.Types (Lens')
+import Data.Lens.Zoom (zoom)
 import Data.List (fold)
 import Data.Maybe (Maybe(..))
 import Data.Traversable (for_, traverse, traverse_)
@@ -179,6 +180,9 @@ deleteMarker markerId = do
     H.liftEff $ PCM.clearTextMarker reference
   H.modify (over _markers $ Map.delete markerId)
 
+getsDoc :: ∀ e m. MonadAff (CodeMirrorEffects e) m => DSL m (Maybe PCM.Doc)
+getsDoc = gets _.codeMirror >>= traverse \ cm -> H.liftEff $ PCM.getDoc cm
+
 eval :: ∀ e m. MonadAff (CodeMirrorEffects e) m => Query ~> DSL m
 eval = case _ of
 
@@ -188,11 +192,21 @@ eval = case _ of
       Ack -> pure next
 
       Added sid loc added -> do
-        H.liftEff $ log "Marking Processing"
+        -- H.liftEff $ log "Marking Processing"
         updateMarker markerId (_ { stage = Processing sid })
         pure next
 
       Completed -> pure next
+
+      CoqExn mLoc mSids exn -> do
+        -- this should really delete the marker, and all its followers
+        deleteMarker markerId
+        newTip <- H.gets (view _markers >>> Map.findMax) >>= case _ of
+          Nothing         -> pure initialPosition
+          Just lastMarker -> pure lastMarker.value.marker.to
+        H.modify (_ { tip = newTip })
+        getsDoc >>= traverse_ \ doc -> H.liftEff $ PCM.setCursor doc newTip Nothing
+        pure next
 
       _ -> do
         H.liftEff $ log $ "TODO: AnswerForMarker: " <> show answer

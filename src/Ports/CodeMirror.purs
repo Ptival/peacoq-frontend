@@ -1,7 +1,6 @@
 module Ports.CodeMirror where
 
 import Prelude
-import CSS.Display as CSSD
 import Control.Monad.Eff.Uncurried as EU
 import Ports.CodeMirror.Configuration as CFG
 import Ports.CodeMirror.TextMarkerOptions as TMO
