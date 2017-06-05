@@ -15,7 +15,8 @@ import CodeMirror.Position (Position, initialPosition)
 import CodeMirror.TextMarker (TextMarker, TextMarkerId)
 import Control.Monad.Aff.AVar (AVAR)
 import Control.Monad.Aff.Class (class MonadAff)
-import Control.Monad.Eff.Console (CONSOLE)
+import Control.Monad.Eff (Eff)
+import Control.Monad.Eff.Console (CONSOLE, log)
 import Control.Monad.State.Class (class MonadState, gets, modify)
 import Coq.Position (nextSentence)
 import Data.Array (fromFoldable)
@@ -28,11 +29,6 @@ import Halogen.HTML.CSS (style)
 import Halogen.Query (RefLabel(..))
 import SerAPI.Answer (AnswerKind(Added))
 import Stage (Stage(..), stageColor)
-
-type CodeMirrorEffects e =
-  ( avar    :: AVAR
-  , console :: CONSOLE
-  | e)
 
 type State =
   { code           :: String
@@ -66,8 +62,9 @@ data Query a
   | Forward                                 a
   | GoTo                                    a
   | Init                                    a
-  | HandleChange PCM.CodeMirrorChange (H.SubscribeStatus -> a)
-  | HandleKey    KeyCombination       (H.SubscribeStatus -> a)
+  | HandleChange         PCM.CodeMirrorChange         (H.SubscribeStatus -> a)
+  | HandleCursorActivity PCM.CodeMirrorCursorActivity (H.SubscribeStatus -> a)
+  | HandleKey            KeyCombination               (H.SubscribeStatus -> a)
 
 data Message
   = Sentence TextMarkerId String
@@ -138,6 +135,7 @@ type DSL = H.ComponentDSL State Query Message
 
 data KeyCombination
   = CtrlAltDown
+  | CtrlAltRight
   | CtrlAltUp
 
 type KeyBinding = { key :: KeyCombination, keyS :: String }
@@ -147,9 +145,15 @@ bindKey key keyS = { key, keyS }
 
 keyBindings :: Array KeyBinding
 keyBindings =
-  [ bindKey CtrlAltDown "Ctrl-Alt-Down"
-  , bindKey CtrlAltUp   "Ctrl-Alt-Up"
+  [ bindKey CtrlAltDown  "Ctrl-Alt-Down"
+  , bindKey CtrlAltRight "Ctrl-Alt-Right"
+  , bindKey CtrlAltUp    "Ctrl-Alt-Up"
   ]
+
+type CodeMirrorEffects e =
+  ( avar    :: AVAR
+  , console :: CONSOLE
+  | e)
 
 eval :: ∀ e m. MonadAff (CodeMirrorEffects e) m => Query ~> DSL m
 eval = case _ of
@@ -166,7 +170,7 @@ eval = case _ of
     pure next
 
   Backward next -> do
-    -- TODO
+    H.liftEff $ log $ "TODO: Backward"
     pure next
 
   Forward next -> do
@@ -184,7 +188,7 @@ eval = case _ of
     pure next
 
   GoTo next -> do
-    -- TODO
+    H.liftEff $ log $ "TODO: GoTo"
     pure next
 
   Init next -> do
@@ -199,10 +203,15 @@ eval = case _ of
                    }
           )
       H.modify (_ { codeMirror = Just cm })
-      H.subscribe $ H.eventSource (PCM.onCodeMirrorChange cm) (Just <<< H.request <<< HandleChange)
+      subscribeTo (PCM.onCodeMirrorChange cm)         HandleChange
+      subscribeTo (PCM.onCodeMirrorCursorActivity cm) HandleCursorActivity
       for_ keyBindings \ { key, keyS } -> do
-        H.subscribe $ H.eventSource (PCM.addKeyMap cm keyS false) (Just <<< H.request <<< const (HandleKey key))
+        subscribeTo (PCM.addKeyMap cm keyS false) $ const (HandleKey key)
     pure next
+
+  HandleCursorActivity o status -> do
+    H.liftEff $ log $ "Cursor moved"
+    pure $ status H.Listening
 
   HandleChange change status -> do
     -- H.liftEff $ log $ "Change, removed: " <> change.changeObj.removed
@@ -215,9 +224,18 @@ eval = case _ of
 
   HandleKey u status -> do
     case u of
-      CtrlAltDown -> eval $ H.action Forward
-      CtrlAltUp   -> eval $ H.action Backward
+      CtrlAltDown  -> eval $ H.action Forward
+      CtrlAltRight -> eval $ H.action GoTo
+      CtrlAltUp    -> eval $ H.action Backward
     pure $ status H.Listening
+
+  where
+
+    subscribeTo ::
+      ∀ o.
+      ((o -> Eff (CodeMirrorEffects e) Unit) -> Eff (CodeMirrorEffects e) Unit) ->
+      (o -> ((H.SubscribeStatus -> H.SubscribeStatus) -> Query H.SubscribeStatus)) -> DSL m Unit
+    subscribeTo es h = H.subscribe $ H.eventSource es (Just <<< H.request <<< h)
 
 codeMirrorComponent ::
   ∀ e m. MonadAff (CodeMirrorEffects e) m => H.Component HH.HTML Query Input Message m

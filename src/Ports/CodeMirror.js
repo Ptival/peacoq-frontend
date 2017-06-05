@@ -64,12 +64,14 @@ function onEffFn(eventType, kArgs) {
     }
 }
 
-exports._onCodeMirrorChange = onEffFn("change", ["instance", "changeObj"])
+exports._onCodeMirrorChange         = onEffFn("change",         ["instance", "changeObj"])
+exports._onCodeMirrorCursorActivity = onEffFn("cursorActivity", ["instance"])
 
 exports._codeMirror = CodeMirror
 
 exports._addKeyMap  = effFnM("addKeyMap")
 exports._getDoc     = effFnM("getDoc")
+exports._getCursor  = effFnM("getCursor")
 exports._getValue   = effFnM("getValue")
 exports._hasFocus   = effFnM("hasFocus")
 exports._markText   = effFnM("markText")

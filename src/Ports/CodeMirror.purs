@@ -1,6 +1,7 @@
 module Ports.CodeMirror where
 
 import Prelude
+import CSS.Display as CSSD
 import Control.Monad.Eff.Uncurried as EU
 import Ports.CodeMirror.Configuration as CFG
 import Ports.CodeMirror.TextMarkerOptions as TMO
@@ -25,6 +26,22 @@ addKeyMap cm key b k = EU.runEffFn3 _addKeyMap cm (options (opt key := EU.mkEffF
 foreign import _codeMirror :: ∀ e. EU.EffFn2 e HTMLElement CFG.RawConfiguration CodeMirror
 codeMirror :: ∀ e. HTMLElement -> CFG.Configuration -> Eff e CodeMirror
 codeMirror e c = EU.runEffFn2 _codeMirror e (CFG.toRaw c)
+
+data EndSelector
+  = From
+  | To
+  | Head
+  | Anchor
+
+foreign import _getCursor :: ∀ e. EU.EffFn2 e Doc (Nullable String) Position
+getCursor :: ∀ e. Doc -> Maybe EndSelector -> Eff e Position
+getCursor d s = EU.runEffFn2 _getCursor d (toNullable $ stringOfEndSelector <$> s)
+  where
+    stringOfEndSelector = case _ of
+      From   -> "from"
+      To     -> "to"
+      Head   -> "head"
+      Anchor -> "anchor"
 
 foreign import _getDoc :: ∀ e. EU.EffFn1 e CodeMirror Doc
 getDoc :: ∀ e. CodeMirror -> Eff e Doc
@@ -51,11 +68,17 @@ type ChangeObj =
   , origin  :: String
   }
 
-type CodeMirrorChange =
-  { instance  :: CodeMirror
-  , changeObj :: ChangeObj
-  }
+type WithInstance  r = ( instance  :: CodeMirror | r)
+type WithChangeObj r = ( changeObj :: ChangeObj  | r)
 
-foreign import _onCodeMirrorChange :: ∀ e. EU.EffFn2 e CodeMirror (CodeMirrorChange -> Eff e Unit) Unit
-onCodeMirrorChange :: ∀ e. CodeMirror -> (CodeMirrorChange -> Eff e Unit) -> Eff e Unit
+type CodeMirrorChange = Record (WithInstance (WithChangeObj ()))
+foreign import _onCodeMirrorChange ::
+  ∀ e. EU.EffFn2 e CodeMirror (CodeMirrorChange-> Eff e Unit) Unit
+onCodeMirrorChange :: ∀ e. CodeMirror -> (CodeMirrorChange-> Eff e Unit) -> Eff e Unit
 onCodeMirrorChange cm h = EU.runEffFn2 _onCodeMirrorChange cm h
+
+type CodeMirrorCursorActivity = Record (WithInstance ())
+foreign import _onCodeMirrorCursorActivity ::
+  ∀ e. EU.EffFn2 e CodeMirror (CodeMirrorCursorActivity -> Eff e Unit) Unit
+onCodeMirrorCursorActivity :: ∀ e. CodeMirror -> (CodeMirrorCursorActivity -> Eff e Unit) -> Eff e Unit
+onCodeMirrorCursorActivity cm h = EU.runEffFn2 _onCodeMirrorCursorActivity cm h
