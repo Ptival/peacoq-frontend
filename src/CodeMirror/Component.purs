@@ -19,7 +19,7 @@ import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Console (CONSOLE, log)
 import Control.Monad.State.Class (class MonadState, gets, modify)
 import Coq.Position (nextSentence)
-import Data.Array (fromFoldable)
+import Data.Array (elem, fromFoldable)
 import Data.Foldable (find)
 import Data.Lens (lens, over, view)
 import Data.Lens.Types (Lens')
@@ -72,18 +72,19 @@ initialState { code } =
   }
 
 data Query a
-  = Backward                                a
-  | Forward                                 a
-  | GoTo                                    a
-  | Init                                    a
-  | ProcessAnswer   TextMarkerId AnswerKind a
-  | ProcessFeedback Feedback                a
+  = Backward                                        a
+  | Forward                                         a
+  | GoTo                                            a
+  | Init                                            a
+  | ProcessAnswer   AnswerKind (Maybe TextMarkerId) a
+  | ProcessFeedback Feedback                        a
   | HandleChange         PCM.CodeMirrorChange         (H.SubscribeStatus -> a)
   | HandleCursorActivity PCM.CodeMirrorCursorActivity (H.SubscribeStatus -> a)
   | HandleKey            KeyCombination               (H.SubscribeStatus -> a)
 
 data Message
-  = Sentence TextMarkerId String
+  = Cancel StateId
+  | Sentence TextMarkerId String
 
 addMarker :: ∀ m. MonadState State m => Position -> Position -> String -> m TextMarker
 addMarker from to sentence = do
@@ -115,6 +116,8 @@ renderMarker { id, stage } =
   , style do
       flexCol
       CSS.backgroundColor $ Stage.stageColor stage
+      CSS.border          CSS.solid (CSS.fromString "1px") CSS.black
+      CSS.boxSizing       $ CSS.borderBox
       CSS.height          $ CSS.fromString "100%"
       CSS.width           $ CSS.fromString "100%"
   ]
@@ -230,7 +233,7 @@ updateMarker ::
   ∀ e m. MonadAff (CodeMirrorEffects e) m =>
   TextMarkerId -> (TextMarker -> TextMarker) -> DSL m Unit
 updateMarker markerId update = do
-  getsDoc >>= traverse_ \ doc -> do 
+  getsDoc >>= traverse_ \ doc -> do
     H.gets (view _markers >>> Map.lookup markerId) >>= traverse_ \ { marker, reference } -> do
       let newMarker = update marker
       newReference <- H.liftEff $ do
@@ -274,7 +277,9 @@ eval :: ∀ e m. MonadAff (CodeMirrorEffects e) m => Query ~> DSL m
 eval = case _ of
 
   Backward next -> do
-    H.liftEff $ log $ "TODO: Backward"
+    gets (_.markers >>> Map.findMax) >>= traverse_ \ { key, value } -> do
+      let { marker, reference } = value
+      Stage.stageStateId marker.stage # traverse_ \ sid -> H.raise $ Cancel sid
     pure next
 
   Forward next -> do
@@ -311,20 +316,37 @@ eval = case _ of
         subscribeTo (PCM.addKeyMap cm keyS false) $ const (HandleKey key)
     pure next
 
-  ProcessAnswer markerId answer next ->
+  ProcessAnswer answer maybeMarkerId next ->
     case answer of
 
       Ack -> pure next
 
       Added sid loc added -> do
-        -- H.liftEff $ log "Marking Processing"
-        updateMarker markerId (_ { stage = Stage.Processing sid })
+        case maybeMarkerId of
+          Nothing       -> H.liftEff $ log $ "Received Added for an unknown marker id"
+          Just markerId -> updateMarker markerId (_ { stage = Stage.Processing sid })
+        pure next
+
+      Canceled stateIds-> do
+        markers <- gets (view _markers)
+        for_ markers \ { marker, reference } -> do
+          if marker.stage == Stage.ToProcess || elem (Stage.stageStateId marker.stage) (Just <$> stateIds)
+            then deleteMarker marker.id
+            else pure unit
+          pure unit
+        newTip <- gets (view _markers >>> Map.findMax) >>= case _ of
+          Nothing         -> pure initialPosition
+          Just lastMarker -> pure lastMarker.value.marker.to
+        H.modify (_ { tip = newTip })
+        getsDoc >>= traverse_ \ doc -> H.liftEff $ PCM.setCursor doc newTip Nothing
         pure next
 
       Completed -> pure next
 
       CoqExn mLoc mSids exn -> do
-        deleteMarkerUpdatingTip markerId
+        -- It often happens that we receive a CoqExn for an unknown marker id, usually for
+        -- a stmObserve that failed
+        maybeMarkerId # traverse_ deleteMarkerUpdatingTip
         pure next
 
       _ -> do

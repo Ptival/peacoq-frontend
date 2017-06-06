@@ -31,3 +31,9 @@ textMarkerOptions stage =
                                           ]
                  , readOnly = Just true
                  }
+
+stageStateId :: Stage -> Maybe StateId
+stageStateId = case _ of
+  ToProcess      -> Nothing
+  Processing sid -> Just sid
+  Processed  sid -> Just sid

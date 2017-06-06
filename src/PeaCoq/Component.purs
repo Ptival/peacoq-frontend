@@ -24,14 +24,15 @@ import Halogen.Component.ChildPath (ChildPath, cp1, cp2)
 import Halogen.HTML.CSS (style)
 import Network.HTTP.Affjax (AJAX)
 import SerAPI.Answer (Answer(..), AnswerKind(..))
-import SerAPI.Command (Command(Control), CommandTag, TaggedCommand, tagOf)
+import SerAPI.Command (Command(..), CommandTag, TaggedCommand, tagOf)
 import SerAPI.Command.Control (Control(..), defaultAddOptions)
 import SerAPI.Feedback (Feedback)
 import SerAPI.Types (StateId)
 
 -- this seems a little dumb, but looks like we have to...
 data Query a
-  = CodeMirrorSentence TextMarkerId String a
+  = CodeMirrorCancel   StateId             a
+  | CodeMirrorSentence TextMarkerId String a
   | SAPIPing                               a
   | SAPIAnswer         Answer              a
   | SAPIFeedback       Feedback            a
@@ -59,6 +60,7 @@ type Message = Void
 
 handleCodeMirror :: CM.Message -> Maybe (Query Unit)
 handleCodeMirror = case _ of
+  CM.Cancel   stateId           -> Just $ H.action $ CodeMirrorCancel   stateId
   CM.Sentence markerId sentence -> Just $ H.action $ CodeMirrorSentence markerId sentence
 
 handleSerAPI :: SAPI.Message -> Maybe (Query Unit)
@@ -101,6 +103,9 @@ stmAdd s = H.request $ SAPI.TagCommand $ Control $ StmAdd { addOptions : default
                                                           , sentence   : s
                                                           }
 
+stmCancel :: Array StateId -> SAPI.Query TaggedCommand
+stmCancel sids = H.request $ SAPI.TagCommand $ Control $ StmCancel { stateIds : sids }
+
 stmObserve :: StateId -> SAPI.Query TaggedCommand
 stmObserve sid = H.request $ SAPI.TagCommand $ Control $ StmObserve { stateId : sid }
 
@@ -110,11 +115,22 @@ stmQuit = H.request $ SAPI.TagCommand $ Control $ Quit
 ping :: SAPI.Query Unit
 ping = H.action SAPI.Ping
 
+tagAndSend ::
+  ∀ e m. MonadAff (PeaCoqEffects e) m => SAPI.Query TaggedCommand -> H.ParentDSL State Query ChildQuery Slot Message m Unit
+tagAndSend cmd =
+  H.query' sapiSlot unit cmd >>= traverse_ \ taggedCommand -> do
+    H.query' sapiSlot unit (H.action $ SAPI.Send taggedCommand)
+
 eval :: ∀ e m. MonadAff (PeaCoqEffects e) m => Query ~> H.ParentDSL State Query ChildQuery Slot Message m
 eval = case _ of
 
+  CodeMirrorCancel stateId next -> do
+    tagAndSend $ stmCancel [stateId]
+    pure next
+
   CodeMirrorSentence markerId sentence next -> do
     -- IMPORTANT: make sure the state is modified to account for the addTag before calling stmAdd
+    -- DO NOT `tagAndSend`
     H.query' sapiSlot unit (stmAdd sentence) >>= traverse_ \ taggedCommand -> do
       -- first, save the mapping, so that when receiving the reply we know who it is
       H.modify $ over _tagToMarker $ Map.insert (tagOf taggedCommand) markerId
@@ -123,16 +139,14 @@ eval = case _ of
 
   SAPIAnswer (Answer tag answer) next -> do
     -- H.liftEff $ log $ fold ["Received answer: ", show tag, ": ", show answer]
-    markers <- H.gets (_.tagToMarker >>> Map.keys)
+    -- markers <- H.gets (_.tagToMarker >>> Map.keys)
     -- H.liftEff $ log $ fold ["Current known markers: ", show markers]
-    H.gets (view _tagToMarker >>> Map.lookup tag) >>= traverse_ \ markerId -> do
-      _ <- H.query' cmSlot unit $ H.action $ CM.ProcessAnswer markerId answer
-      -- TODO
-      pure unit
+    maybeMarkerId <- H.gets (view _tagToMarker >>> Map.lookup tag)
+    _ <- H.query' cmSlot unit $ H.action $ CM.ProcessAnswer answer maybeMarkerId
     case answer of
+      -- When a stateId is added, we want to observe it
       Added sid loc added -> do
-        H.query' sapiSlot unit (stmObserve sid) >>= traverse_ \ taggedCommand -> do
-          H.query' sapiSlot unit $ H.action $ SAPI.Send taggedCommand
+        tagAndSend $ stmObserve sid
       -- When an answer has completed, we can remove its tag from tagToMarker
       Completed -> do
         -- H.liftEff $ log $ "Answer " <> show tag <> " has completed"
