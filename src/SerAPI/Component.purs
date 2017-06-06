@@ -7,10 +7,10 @@ import Network.HTTP.Affjax as AX
 import Control.Monad.Aff.Class (class MonadAff)
 import Control.Monad.Eff.Console (CONSOLE, log)
 import Data.Either (Either(..))
-import Data.Foldable (fold, oneOf)
+import Data.Foldable (oneOf)
 import Data.Generic (class Generic, gShow)
 import Data.HTTP.Method (Method(..))
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(Nothing, Just))
 import Data.Traversable (for, for_)
 import Halogen.Component (ComponentHTML, ComponentDSL)
 import Ports.Sexp (jsonParseArray, sexp)
@@ -18,7 +18,7 @@ import SerAPI.Answer (Answer)
 import SerAPI.Command (Command(Control), CommandTag, TaggedCommand(TaggedCommand))
 import SerAPI.Command.Control (Control(..))
 import SerAPI.Command.ToSexp (toSexp)
-import SerAPI.Feedback (Feedback)
+import SerAPI.Feedback (EditOrStateId(..), Feedback(..), FeedbackContent(..), Level(..))
 import SerAPI.FromSexp (fromSexp)
 
 type SerAPIEffects e =
@@ -43,8 +43,8 @@ data Query a
   | TagCommand Command (TaggedCommand -> a)
 
 data Message
-  = Answer Answer
-  | Feedback Feedback
+  = MessageAnswer Answer
+  | MessageFeedback Feedback
 
 derive instance genericMessage :: Generic Message
 
@@ -89,9 +89,14 @@ serAPIOutput :: String -> Maybe Message
 serAPIOutput o = do
   s <- sexp o
   oneOf $
-    [ Answer <$> fromSexp s
-    , Feedback <$> fromSexp s
+    [ MessageAnswer <$> fromSexp s
+    , MessageFeedback <$> fromSexp s
     ]
+
+tagAndSend :: ∀ e m. MonadAff (SerAPIEffects e) m => Command -> DSL m Unit
+tagAndSend cmd = do
+  taggedCommand <- eval $ H.request $ TagCommand $ cmd
+  eval $ H.action $ Send $ taggedCommand
 
 handleResponse :: ∀ e m. MonadAff (SerAPIEffects e) m => AX.AffjaxResponse String -> DSL m Unit
 handleResponse r = do
@@ -101,6 +106,16 @@ handleResponse r = do
         Just m -> do
           H.raise m
           -- H.liftEff $ log $ "Correctly read message: " <> show m
+          case m of
+            MessageFeedback (Feedback { id, contents }) ->
+              case id of
+                StateId sid ->
+                  case contents of
+                    Message Error _ _ -> do
+                      tagAndSend $ Control $ StmCancel { stateIds : [sid] }
+                    _ -> pure unit
+                _ -> pure unit
+            _ -> pure unit
           pure unit
         Nothing -> do
           H.liftEff $ log $ "Could not decode: " <> (show $ sexp response)

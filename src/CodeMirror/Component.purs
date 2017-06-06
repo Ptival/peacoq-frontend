@@ -28,7 +28,8 @@ import Data.Traversable (for_, traverse, traverse_)
 import Halogen.HTML.CSS (style)
 import Halogen.Query (RefLabel(..))
 import SerAPI.Answer (AnswerKind(..))
-import SerAPI.Feedback (EditOrStateId(..), Feedback(..), FeedbackContent(..))
+import SerAPI.Feedback (EditOrStateId(..), Feedback(..), FeedbackContent(..), Level(..))
+import SerAPI.Types (StateId)
 
 markerBarHeight :: ∀ a. CSS.Size a
 markerBarHeight = CSS.fromString "20px"
@@ -229,12 +230,13 @@ updateMarker ::
   ∀ e m. MonadAff (CodeMirrorEffects e) m =>
   TextMarkerId -> (TextMarker -> TextMarker) -> DSL m Unit
 updateMarker markerId update = do
-  H.gets (view _markers >>> Map.lookup markerId) >>= traverse_ \ { marker, reference } -> do
-    let newMarker = update marker
-    newReference <- getsDoc >>= traverse \ doc -> H.liftEff $ do
-      PCM.clearTextMarker reference
-      PCM.markText doc marker.from marker.to (Stage.textMarkerOptions newMarker.stage)
-    H.modify $ over _markers $ Map.update (Just <<< over _marker update) markerId
+  getsDoc >>= traverse_ \ doc -> do 
+    H.gets (view _markers >>> Map.lookup markerId) >>= traverse_ \ { marker, reference } -> do
+      let newMarker = update marker
+      newReference <- H.liftEff $ do
+        PCM.clearTextMarker reference
+        PCM.markText doc marker.from marker.to (Stage.textMarkerOptions newMarker.stage)
+      H.modify $ over _markers $ Map.insert markerId { marker : newMarker, reference : newReference }
   pure unit
 
 -- | Hypothesis: we might not need to warn the parent component, because they only refer
@@ -243,11 +245,30 @@ updateMarker markerId update = do
 deleteMarker :: ∀ e m. MonadAff (CodeMirrorEffects e) m => TextMarkerId -> DSL m Unit
 deleteMarker markerId = do
   H.gets (_.markers >>> Map.lookup markerId) >>= traverse_ \ { marker, reference } -> do
+    -- H.liftEff $ log $ "Asking CodeMirror to clear the marker"
     H.liftEff $ PCM.clearTextMarker reference
+  -- H.liftEff $ log $ "Now removing the marker from the Map"
   H.modify (over _markers $ Map.delete markerId)
+
+deleteMarkerUpdatingTip :: ∀ e m. MonadAff (CodeMirrorEffects e) m => TextMarkerId -> DSL m Unit
+deleteMarkerUpdatingTip markerId = do
+  deleteMarker markerId
+  newTip <- H.gets (view _markers >>> Map.findMax) >>= case _ of
+    Nothing         -> pure initialPosition
+    Just lastMarker -> pure lastMarker.value.marker.to
+  H.modify (_ { tip = newTip })
+  getsDoc >>= traverse_ \ doc -> H.liftEff $ PCM.setCursor doc newTip Nothing
 
 getsDoc :: ∀ e m. MonadAff (CodeMirrorEffects e) m => DSL m (Maybe PCM.Doc)
 getsDoc = gets _.codeMirror >>= traverse \ cm -> H.liftEff $ PCM.getDoc cm
+
+getsProcessingMarkerWithStateId ::
+  ∀ e m. MonadAff (CodeMirrorEffects e) m => StateId -> DSL m (Maybe TextMarker)
+getsProcessingMarkerWithStateId sid =
+  H.gets $
+  view _markers
+  >>> find (\ m -> m.marker.stage == Stage.Processing sid)
+  >>> liftA1 _.marker
 
 eval :: ∀ e m. MonadAff (CodeMirrorEffects e) m => Query ~> DSL m
 eval = case _ of
@@ -303,13 +324,7 @@ eval = case _ of
       Completed -> pure next
 
       CoqExn mLoc mSids exn -> do
-        -- this should really delete the marker, and all its followers
-        deleteMarker markerId
-        newTip <- H.gets (view _markers >>> Map.findMax) >>= case _ of
-          Nothing         -> pure initialPosition
-          Just lastMarker -> pure lastMarker.value.marker.to
-        H.modify (_ { tip = newTip })
-        getsDoc >>= traverse_ \ doc -> H.liftEff $ PCM.setCursor doc newTip Nothing
+        deleteMarkerUpdatingTip markerId
         pure next
 
       _ -> do
@@ -322,8 +337,12 @@ eval = case _ of
       StateId sid ->
         case contents of
           Processed -> do
-            _ <- H.gets (view _markers >>> find (\ m -> m.marker.stage == Stage.Processing sid)) >>= traverse_ \ marker -> do
-              updateMarker marker.marker.id (_ { stage = Stage.Processed sid })
+            getsProcessingMarkerWithStateId sid >>= traverse_ \ marker -> do
+              updateMarker marker.id (_ { stage = Stage.Processed sid })
+            pure next
+          Message Error _ _ -> do
+            getsProcessingMarkerWithStateId sid >>= traverse_ \ marker -> do
+              deleteMarkerUpdatingTip marker.id
             pure next
           _ -> pure next
 

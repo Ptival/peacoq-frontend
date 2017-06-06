@@ -1,8 +1,9 @@
 module SerAPI.FromSexp (class FromSexp, fromSexp) where
 
 import Prelude
+import Data.Array as Array
+import Data.List as List
 import Data.Int (fromString)
-import Data.List (List, fromFoldable)
 import Data.Maybe (Maybe(..))
 import Data.String (Pattern(Pattern), stripPrefix, stripSuffix)
 import Data.Traversable (traverse)
@@ -47,11 +48,15 @@ instance fromSexpTuple :: (FromSexp a, FromSexp b) => FromSexp (Tuple a b) where
       pure $ Tuple a b
     _ -> Nothing
 
-instance fromSexpList :: FromSexp t => FromSexp (List t) where
+instance fromSexpArray :: FromSexp t => FromSexp (Array t) where
   fromSexp = case _ of
-    List l -> fromFoldable <$> traverse fromSexp l
+    List l -> Array.fromFoldable <$> traverse fromSexp l
     _      -> Nothing
 
+instance fromSexpList :: FromSexp t => FromSexp (List.List t) where
+  fromSexp = case _ of
+    List l -> List.fromFoldable <$> traverse fromSexp l
+    _      -> Nothing
 
 instance fromSexpString :: FromSexp String where
   fromSexp = fromAtom Just

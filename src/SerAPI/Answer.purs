@@ -48,6 +48,9 @@ instance fromSexpAnswerKind :: FromSexp AnswerKind where
       loc   <- fromSexp sloc
       added <- fromSexp sadded
       pure $ Added id loc added
+    List [ Atom "StmCanceled", sids ] -> do
+      ids <- fromSexp sids
+      pure $ Canceled ids
     List [ Atom "CoqExn", sm1, sm2, se ] -> do
       m1 <- fromSexp sm1
       m2 <- fromSexp sm2

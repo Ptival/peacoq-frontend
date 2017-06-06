@@ -1,7 +1,6 @@
 module SerAPI.Command.Control where
 
 import Data.Foldable (fold)
-import Data.List (List)
 import Data.Maybe (Maybe(..))
 import SerAPI.Command.ToSexp (class ToSexp, toSexp)
 import SerAPI.Types (StateId)
@@ -22,14 +21,14 @@ defaultAddOptions =
   }
 
 data Control
-  = LibAdd     { qualifiedPath :: List String
+  = LibAdd     { qualifiedPath :: Array String
                , physicalPath  :: String
                , containsML    :: Boolean
                }
   | StmAdd     { addOptions :: AddOptions
                , sentence   :: String
                }
-  | StmCancel  { stateIds :: List StateId
+  | StmCancel  { stateIds :: Array StateId
                }
   | StmObserve { stateId :: StateId
                }

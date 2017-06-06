@@ -63,8 +63,8 @@ handleCodeMirror = case _ of
 
 handleSerAPI :: SAPI.Message -> Maybe (Query Unit)
 handleSerAPI = case _ of
-  SAPI.Answer   a -> Just $ H.action $ SAPIAnswer a
-  SAPI.Feedback f -> Just $ H.action $ SAPIFeedback f
+  SAPI.MessageAnswer   a -> Just $ H.action $ SAPIAnswer a
+  SAPI.MessageFeedback f -> Just $ H.action $ SAPIFeedback f
 
 type PeaCoqEffects e =
   ( ajax    :: AJAX
