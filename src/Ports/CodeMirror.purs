@@ -64,6 +64,10 @@ foreign import _markText ::
 markText :: ∀ e. Doc -> Position -> Position -> Maybe TMO.TextMarkerOptions -> Eff e TextMarker
 markText d p1 p2 m = EU.runEffFn4 _markText d p1 p2 (toNullable $ TMO.toRaw <$> m)
 
+foreign import _scrollIntoView :: ∀ e. EU.EffFn1 e CodeMirror Unit
+scrollIntoView :: ∀ e. CodeMirror -> Eff e Unit
+scrollIntoView = EU.runEffFn1 _scrollIntoView
+
 foreign import _setCursor :: ∀ e. EU.EffFn3 e Doc Position (Nullable SSO.RawSetSelectionOptions) Unit
 setCursor :: ∀ e. Doc -> Position -> Maybe SSO.SetSelectionOptions -> Eff e Unit
 setCursor d p m = EU.runEffFn3 _setCursor d p (toNullable $ SSO.toRaw <$> m)
