@@ -1,6 +1,7 @@
 module PeaCoq.Component where
 
 import Prelude
+import CSS as CSS
 import CSS.Display as CSSD
 import CodeMirror.Component as CM
 import Data.Map as Map
@@ -11,7 +12,6 @@ import CodeMirror.TextMarker (TextMarkerId)
 import Control.Monad.Aff.AVar (AVAR)
 import Control.Monad.Aff.Class (class MonadAff)
 import Control.Monad.Aff.Console (CONSOLE)
-import Control.Monad.Eff.Console (log)
 import Data.Either.Nested (Either2)
 import Data.Foldable (fold)
 import Data.Functor.Coproduct.Nested (Coproduct2)
@@ -27,6 +27,7 @@ import SerAPI.Answer (Answer(..), AnswerKind(..))
 import SerAPI.Command (Command(Control), CommandTag, TaggedCommand, tagOf)
 import SerAPI.Command.Control (Control(..), defaultAddOptions)
 import SerAPI.Feedback (Feedback)
+import SerAPI.Types (StateId)
 
 -- this seems a little dumb, but looks like we have to...
 data Query a
@@ -84,16 +85,24 @@ renderTagToMarker (Tuple commandTag markerId) =
 
 render :: ∀ m e. MonadAff (PeaCoqEffects e) m => State -> Render m
 render state =
-  HH.div_ $
-    -- [ HH.div_ $ renderTagToMarker <$> Map.toUnfoldable state.tagToMarker ] <>
-    [ HH.slot' sapiSlot unit SAPI.serAPIComponent   unit                   handleSerAPI
-    , HH.slot' cmSlot   unit CM.codeMirrorComponent { code : initialCode } handleCodeMirror
-    ]
+  HH.div [ style $ do
+              CSS.height    $ CSS.fromString "100%"
+              CSS.minHeight $ CSS.fromString "100%"
+         ]
+  $
+  -- [ HH.div_ $ renderTagToMarker <$> Map.toUnfoldable state.tagToMarker ]
+  -- <>
+  [ HH.slot' sapiSlot unit SAPI.serAPIComponent   unit                   handleSerAPI ]
+  <>
+  [ HH.slot' cmSlot   unit CM.codeMirrorComponent { code : initialCode } handleCodeMirror ]
 
 stmAdd :: String -> SAPI.Query TaggedCommand
 stmAdd s = H.request $ SAPI.TagCommand $ Control $ StmAdd { addOptions : defaultAddOptions
                                                           , sentence   : s
                                                           }
+
+stmObserve :: StateId -> SAPI.Query TaggedCommand
+stmObserve sid = H.request $ SAPI.TagCommand $ Control $ StmObserve { stateId : sid }
 
 stmQuit :: SAPI.Query TaggedCommand
 stmQuit = H.request $ SAPI.TagCommand $ Control $ Quit
@@ -117,11 +126,14 @@ eval = case _ of
     markers <- H.gets (_.tagToMarker >>> Map.keys)
     -- H.liftEff $ log $ fold ["Current known markers: ", show markers]
     H.gets (view _tagToMarker >>> Map.lookup tag) >>= traverse_ \ markerId -> do
-      _ <- H.query' cmSlot unit $ H.action $ CM.AnswerForMarker markerId answer
+      _ <- H.query' cmSlot unit $ H.action $ CM.ProcessAnswer markerId answer
       -- TODO
       pure unit
-    -- When an answer has completed, we can remove its tag from tagToMarker
     case answer of
+      Added sid loc added -> do
+        H.query' sapiSlot unit (stmObserve sid) >>= traverse_ \ taggedCommand -> do
+          H.query' sapiSlot unit $ H.action $ SAPI.Send taggedCommand
+      -- When an answer has completed, we can remove its tag from tagToMarker
       Completed -> do
         -- H.liftEff $ log $ "Answer " <> show tag <> " has completed"
         H.modify (over _tagToMarker $ Map.delete tag)
@@ -129,7 +141,7 @@ eval = case _ of
     pure next
 
   SAPIFeedback f next -> do
-    -- TODO
+    _ <- H.query' cmSlot unit $ H.action $ CM.ProcessFeedback f
     pure next
 
   SAPIPing next -> do
@@ -147,14 +159,17 @@ peaCoqComponent =
 
 initialCode :: String
 initialCode = """
-Theorem test : False.
+Theorem test : forall a b, a + b = b + a.
 Proof.
-  idtac.
+  intros.
+  induction a.
+  { idtac. }
 Abort.
-Print Set.
-Print Prop.
 From Coq Require Import Bool.Bool.
 From Coq Require Import ZArith.
+
+(* The stuff below is for testing parsing *)
+
 (*
 . .. .a a. .( (. ). .) {. .{ .} }.
 (* . .. .a a. .( (. ). .) {. .{ .} }. *)

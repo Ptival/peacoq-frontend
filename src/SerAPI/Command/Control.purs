@@ -55,8 +55,8 @@ instance toSexpControl :: ToSexp Control where
       in
       fold ["(StmAdd (", opts, ") ", toSexp sentence, ")"]
 
-    StmCancel { stateIds } -> "TODO"
+    StmCancel { stateIds } -> fold ["(StmCancel ", toSexp stateIds , ")"]
 
-    StmObserve { stateId } -> "TODO"
+    StmObserve { stateId } -> fold ["(StmObserve ", toSexp stateId , ")"]
 
     Quit -> "Quit"

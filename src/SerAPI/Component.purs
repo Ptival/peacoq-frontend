@@ -52,12 +52,14 @@ instance showMessage :: Show Message where
   show = gShow
 
 render :: State -> ComponentHTML Query
-render { lastCommandSent } =
+render { lastCommandSent } = HH.div_ []
+{-
   HH.div_
   [ HH.text $ fold [ "SerAPI is loaded, last command: "
                    , fromMaybe "no command sent yet" (toSexp <$> lastCommandSent)
                    ]
   ]
+-}
 
 type DSL = ComponentDSL State Query Message
 

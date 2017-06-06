@@ -68,6 +68,10 @@ foreign import _setCursor :: ∀ e. EU.EffFn3 e Doc Position (Nullable SSO.RawSe
 setCursor :: ∀ e. Doc -> Position -> Maybe SSO.SetSelectionOptions -> Eff e Unit
 setCursor d p m = EU.runEffFn3 _setCursor d p (toNullable $ SSO.toRaw <$> m)
 
+foreign import _setSize :: ∀ e. EU.EffFn3 e CodeMirror String String Unit
+setSize :: ∀ e. CodeMirror -> String -> String -> Eff e Unit
+setSize = EU.runEffFn3 _setSize
+
 -- | All the `on` stuff is down here
 
 type ChangeObj =

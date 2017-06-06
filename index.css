@@ -1,8 +1,5 @@
-html, body, #main, #view, #codemirror, .CodeMirror {
+html, body {
   height: 100%;
   margin: 0;
-}
-
-.bgGreen {
-  background-color: lime;
+  min-height: 100%;
 }

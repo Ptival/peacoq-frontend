@@ -1,8 +1,9 @@
 module SerAPI.Command.ToSexp (class ToSexp, toSexp) where
 
-import Data.Foldable (fold)
+import Prelude
+import Data.Foldable (fold, intercalate)
+import Data.List (List)
 import Data.String (Pattern(..), Replacement(..), replaceAll)
-import Prelude (show)
 
 class ToSexp t where
   toSexp :: t -> String
@@ -16,3 +17,6 @@ instance toSexpInt :: ToSexp Int where
 
 instance toSexpString :: ToSexp String where
   toSexp s = fold ["\"", replaceAll (Pattern "\"") (Replacement "\\\"") s, "\""]
+
+instance toSexpList :: ToSexp t => ToSexp (List t) where
+  toSexp l = fold ["(", intercalate " " (toSexp <$> l), ")"]

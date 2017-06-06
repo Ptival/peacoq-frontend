@@ -59,6 +59,7 @@ function onEffFn(eventType, kArgs) {
             for (var i in kArgs) {
                 args[kArgs[i]] = arguments[i]
             }
+            // console.log(self)
             callback(args)()
         })
     }
@@ -77,3 +78,4 @@ exports._getValue        = effFnM("getValue")
 exports._hasFocus        = effFnM("hasFocus")
 exports._markText        = effFnM("markText")
 exports._setCursor       = effFnM("setCursor")
+exports._setSize         = effFnM("setSize")
