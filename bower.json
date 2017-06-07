@@ -26,7 +26,8 @@
     "purescript-psci-support": "^3.0.0",
     "purescript-affjax": "^4.0.0",
     "purescript-nullable": "^3.0.0",
-    "purescript-numbers": "^5.0.0"
+    "purescript-numbers": "^5.0.0",
+    "purescript-monad-loops": "^0.4.0"
   },
   "devDependencies": {
     "purescript-psci-support": "^3.0.0",

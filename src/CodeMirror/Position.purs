@@ -5,6 +5,7 @@ import Data.Array as Array
 import Data.String as String
 import Data.String.Utils as String.Utils
 import Control.Apply (applySecond, lift2)
+import Control.Monad.Rec.Class (class MonadRec, Step(..), tailRecM)
 import Control.Monad.State.Class (class MonadState, get, gets, modify, put)
 import Data.Generic (class Generic, gEq, gShow)
 import Data.Maybe (Maybe(..))
@@ -25,6 +26,20 @@ instance eqPosition' :: Eq Position' where
 
 instance showPosition' :: Show Position' where
   show = gShow
+
+data Strictness
+  = Strictly
+  | NotStrictly
+
+isBefore :: Strictness -> Position -> Position -> Boolean
+isBefore strictness { line : l1, ch : c1 } { line : l2, ch : c2 } =
+  l1 < l2 || (l1 == l2 && before strictness c1 c2)
+  where
+    before Strictly    a b = a <  b
+    before NotStrictly a b = a <= b
+
+isAfter :: Strictness -> Position -> Position -> Boolean
+isAfter s a b = isBefore s b a
 
 initialPosition :: Position
 initialPosition =
@@ -59,12 +74,18 @@ forward = do
         pure head
 
 -- | Returns the position at which the document suffix satisfies a condition
-findFirstPositionWhere :: ∀ m. MonadState PositionState m => (String -> Boolean) -> m (Maybe Position)
-findFirstPositionWhere cond = do
-  { docAfter, position } <- get
-  if cond docAfter
-    then pure $ Just position
-    else forward `applySecond` findFirstPositionWhere cond
+findFirstPositionWhere ::
+  ∀ m.
+  MonadRec m =>
+  MonadState PositionState m =>
+  (String -> Boolean) -> m (Maybe Position)
+findFirstPositionWhere cond = tailRecM go unit
+  where
+    go unit = do
+      s <- get
+      if cond s.docAfter
+        then pure $ Done $ Just s.position
+        else forward `applySecond` (pure $ Loop $ unit)
 
 stringAtPosition :: Position -> String -> Maybe String
 stringAtPosition { line, ch } s =
@@ -83,12 +104,18 @@ makePositionState s =
   , position  : initialPosition
   }
 
-moveToPosition :: ∀ m. MonadState PositionState m => Position -> m Unit
-moveToPosition target = do
-  p <- gets _.position
-  if Position' p == Position' target
-    then pure unit
-    else forward *> moveToPosition target
+moveToPosition ::
+  ∀ m.
+  MonadRec m =>
+  MonadState PositionState m =>
+  Position -> m Unit
+moveToPosition target = tailRecM go unit
+  where
+    go unit = do
+      p <- gets _.position
+      if Position' p == Position' target
+        then pure $ Done unit
+        else forward *> (pure $ Loop unit)
 
 -- | `peek n` lets you peek `n` characters into the document, not modifying the state
 peek :: ∀ m. MonadState PositionState m => Int -> m String

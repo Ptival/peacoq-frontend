@@ -11,12 +11,14 @@ import Halogen.HTML.Properties as HP
 import Ports.CodeMirror as PCM
 import Ports.CodeMirror.Configuration as CFG
 import Stage as Stage
-import CodeMirror.Position (Position, initialPosition)
+import CodeMirror.Position (Position, Position'(..), Strictness(..), initialPosition, isBefore)
 import CodeMirror.TextMarker (TextMarker, TextMarkerId)
+import Control.Apply (lift2)
 import Control.Monad.Aff.AVar (AVAR)
 import Control.Monad.Aff.Class (class MonadAff)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Console (CONSOLE, log)
+import Control.Monad.Rec.Loops (whileM_)
 import Control.Monad.State.Class (class MonadState, gets, modify)
 import Coq.Position (nextSentence)
 import Data.Array (elem, fromFoldable)
@@ -155,7 +157,6 @@ render { code, cursorPosition, markers, tip } =
     [ HH.div
       [ style $ do
            flexCol
-           CSS.backgroundColor $ CSS.red
            CSS.width $ CSS.fromString "50%"
       ]
       [ HH.div
@@ -173,12 +174,10 @@ render { code, cursorPosition, markers, tip } =
     [ HH.div
       [ style do
            flexCol
-           CSS.backgroundColor $ CSS.blue
            CSS.width     $ CSS.fromString "50%"
       ]
       [ HH.pre
         [ style $ do
-             CSS.backgroundColor $ CSS.green
              CSS.height       $ CSS.fromString "100%"
              CSS.minHeight    $ CSS.fromString "100%"
              CSS.marginBottom $ CSS.fromString "0"
@@ -193,7 +192,6 @@ render { code, cursorPosition, markers, tip } =
   [ HH.div
     [ style $ do
          flexRow
-         CSS.backgroundColor $ CSS.pink
          CSS.height    $ markerBarHeight
          CSS.minHeight $ markerBarHeight
          CSS.maxHeight $ markerBarHeight
@@ -265,6 +263,9 @@ deleteMarkerUpdatingTip markerId = do
 getsDoc :: ∀ e m. MonadAff (CodeMirrorEffects e) m => DSL m (Maybe PCM.Doc)
 getsDoc = gets _.codeMirror >>= traverse \ cm -> H.liftEff $ PCM.getDoc cm
 
+getsTip :: ∀ e m. MonadAff (CodeMirrorEffects e) m => DSL m Position
+getsTip = gets _.tip
+
 getsProcessingMarkerWithStateId ::
   ∀ e m. MonadAff (CodeMirrorEffects e) m => StateId -> DSL m (Maybe TextMarker)
 getsProcessingMarkerWithStateId sid =
@@ -278,14 +279,13 @@ eval = case _ of
 
   Backward next -> do
     gets (_.markers >>> Map.findMax) >>= traverse_ \ { key, value } -> do
-      let { marker, reference } = value
-      Stage.stageStateId marker.stage # traverse_ \ sid -> H.raise $ Cancel sid
+      Stage.stageStateId value.marker.stage # traverse_ \ sid -> H.raise $ Cancel sid
     pure next
 
   Forward next -> do
     gets _.codeMirror >>= traverse_ \ cm -> do
       nextMarker >>= traverse_ \ marker -> do
-        reference <- H.liftEff $ do
+        reference <- H.liftEff do
           doc <- PCM.getDoc cm
           PCM.setCursor doc marker.to Nothing
           PCM.markText doc marker.from marker.to (Stage.textMarkerOptions marker.stage)
@@ -294,7 +294,17 @@ eval = case _ of
     pure next
 
   GoTo next -> do
-    H.liftEff $ log $ "TODO: GoTo"
+    target <- gets _.cursorPosition
+    gets _.codeMirror >>= traverse_ \ cm -> do
+      doc <- H.liftEff $ PCM.getDoc cm
+      whileM_
+        (lift2 (isBefore NotStrictly) getsTip (pure target))
+        do
+          nextMarker >>= traverse_ \ marker -> do
+            reference <- H.liftEff do
+              PCM.markText doc marker.from marker.to (Stage.textMarkerOptions marker.stage)
+            H.modify $ over _markers $ Map.insert marker.id { marker, reference }
+            H.raise $ Sentence marker.id marker.sentence
     pure next
 
   Init next -> do

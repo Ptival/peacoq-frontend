@@ -2,7 +2,8 @@ module Coq.Position where
 
 import Prelude
 import CodeMirror.Position (Position, PositionState, forward, makePositionState, moveToPosition, peek, reachedDocEnd)
-import Control.Monad.State (State, gets, runState)
+import Control.Monad.Rec.Class (class MonadRec, Step(..), tailRecM)
+import Control.Monad.State (class MonadState, State, gets, runState)
 import Control.Monad.State.Class (get, modify)
 import Control.Monad.State.Trans (StateT)
 import Data.Char.Unicode (isAlphaNum, isSpace)
@@ -52,11 +53,11 @@ forward' = do
 peek' :: ∀ m. Monad m => Int -> StateT NextSentenceState m String
 peek' n = zoom _positionState (peek n)
 
-moveToPosition' :: ∀ m. Monad m => Position -> StateT NextSentenceState m Unit
+moveToPosition' :: ∀ m. MonadRec m => Position -> StateT NextSentenceState m Unit
 moveToPosition' p = zoom _positionState (moveToPosition p)
 
 -- | helpers to modify the stack
-openComment :: ∀ m. Monad m => StateT NextSentenceState m Unit
+openComment :: ∀ m. MonadState NextSentenceState m => m Unit
 openComment = modify (over _delimiterStack (OpenComment : _))
 
 openString :: ∀ m. Monad m => StateT NextSentenceState m Unit
@@ -79,13 +80,16 @@ makeNextSentenceState ps =
 
 nextSentence :: String -> Position -> Maybe { sentence :: String, position :: Position }
 nextSentence string position =
-  let Tuple msentence state = runState (moveToPosition' position *> go) initialState in
+  let Tuple msentence state = runState (moveToPosition' position *> tailRecM go0 unit) initialState in
   msentence >>= \ sentence -> pure { sentence, position : state.positionState.position }
 
   where
 
     initialState :: NextSentenceState
     initialState = makeNextSentenceState (makePositionState string)
+
+    go :: State NextSentenceState (Step Unit (Maybe String))
+    go = pure $ Loop unit
 
     -- | assumptions:
     -- | - comments look like (* this *) and must be properly nested
@@ -94,10 +98,10 @@ nextSentence string position =
     -- | - sentences end with a period followed by some space/newline
     -- | - bullets are +, -, *, and can be juxtaposed without spacing
     -- | - bullet braces are { and }, and can be juxtaposed without spacing
-    go :: State NextSentenceState (Maybe String)
-    go = do
+    go0 :: Unit -> State NextSentenceState (Step Unit (Maybe String))
+    go0 unit = do
       zoom _positionState reachedDocEnd >>= case _ of
-        true -> pure Nothing
+        true -> pure $ Done $ Nothing
         false -> do
           { delimiterStack } <- get
           case uncons delimiterStack of
@@ -121,7 +125,7 @@ nextSentence string position =
                     _      | charAt 0 s == Just '"' -> forward' *> closeString *> go
                     _                               -> forward' *> go
 
-    peeked :: String -> State NextSentenceState (Maybe String)
+    peeked :: String -> State NextSentenceState (Step Unit (Maybe String))
     peeked s | startsWith "(*"   s = openComment *> forward' *> forward' *> go
              | startsWith "..."  s = forward' *> forward' *> forward' *> here
              | startsWith ".."   s = forward' *> forward' *> go
@@ -134,10 +138,10 @@ nextSentence string position =
              | otherwise           = forward' *> go
 
     followedBySpace :: String -> Boolean
-    followedBySpace s = fromMaybe true (isSpace <$> charAt 1 s) 
+    followedBySpace s = fromMaybe true (isSpace <$> charAt 1 s)
 
     startsWithABullet :: String -> Boolean
     startsWithABullet s = fromMaybe false (flip elem ['+', '-', '*', '{', '}'] <$> charAt 0 s)
 
-    here :: State NextSentenceState (Maybe String)
-    here = Just <$> gets _.sentence
+    here :: State NextSentenceState (Step Unit (Maybe String))
+    here = Done <<< Just <$> gets _.sentence
