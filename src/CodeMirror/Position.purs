@@ -135,3 +135,8 @@ reachedDocEnd :: ∀ m. MonadState PositionState m => m Boolean
 reachedDocEnd = do
   s <- gets _.docAfter
   pure (String.length s == 0)
+
+-- | `addPosition p1 p2` starts from position `p1` and adds `p2`, relatively
+addPosition :: Position -> Position -> Position
+addPosition { line : l1, ch : c1 } { line : l2, ch : c2 } =
+  { line : l1 + l2, ch : if l2 == 0 then c1 + c2 else c2 }

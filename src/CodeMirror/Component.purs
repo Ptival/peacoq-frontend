@@ -11,14 +11,14 @@ import Halogen.HTML.Properties as HP
 import Ports.CodeMirror as PCM
 import Ports.CodeMirror.Configuration as CFG
 import Stage as Stage
-import CodeMirror.Position (Position, Position'(..), Strictness(..), initialPosition, isBefore)
+import CodeMirror.Position (Position, Strictness(Strictly), addPosition, initialPosition, isBefore)
 import CodeMirror.TextMarker (TextMarker, TextMarkerId)
 import Control.Apply (lift2)
 import Control.Monad.Aff.AVar (AVAR)
 import Control.Monad.Aff.Class (class MonadAff)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Console (CONSOLE, log)
-import Control.Monad.Rec.Loops (whileM_)
+import Control.Monad.Loops (whileM)
 import Control.Monad.State.Class (class MonadState, gets, modify)
 import Coq.Position (nextSentence)
 import Data.Array (elem, fromFoldable)
@@ -26,6 +26,7 @@ import Data.Foldable (find)
 import Data.Lens (lens, over, view)
 import Data.Lens.Types (Lens')
 import Data.Maybe (Maybe(..))
+import Data.String (take)
 import Data.Traversable (for_, traverse, traverse_)
 import Halogen.HTML.CSS (style)
 import Halogen.Query (RefLabel(..))
@@ -100,13 +101,29 @@ addMarker from to sentence = do
   modify (\ s -> s { nextMarkerId = nextMarkerId + 1 })
   pure newMarker
 
-nextTip :: State -> Maybe { position :: Position, sentence :: String }
-nextTip { code, tip } = nextSentence code tip
+nextTip ::
+  ∀ e m.
+  MonadAff (CodeMirrorEffects e) m =>
+  DSL m (Maybe { position :: Position, sentence :: String })
+nextTip = do
+  maybeResult <- getsDoc >>= traverse \ doc -> do
+    tip <- getsTip
+    nbLines <- H.liftEff $ PCM.lineCount doc
+    code <- H.liftEff $ PCM.getRange doc tip { line : nbLines + 1, ch : 0 } Nothing
+    H.liftEff $ log $ "Suffix seems to be: " <> take 20 code
+    pure $ do
+      r <- nextSentence code { line : 0, ch : 0 }
+      -- at this point, `r.position` is the position within the code suffix, not the global one
+      pure $ r { position = addPosition tip r.position }
+  pure $ join maybeResult
 
-nextMarker :: ∀ m. MonadState State m => m (Maybe TextMarker)
+nextMarker ::
+  ∀ e m.
+  MonadAff (CodeMirrorEffects e) m =>
+  DSL m (Maybe TextMarker)
 nextMarker = do
-  gets nextTip >>= traverse \ { position : newTip, sentence } -> do
-    tip <- gets _.tip
+  nextTip >>= traverse \ { position : newTip, sentence } -> do
+    tip <- getsTip
     newMarker <- addMarker tip newTip sentence
     modify (\ s -> s { tip = newMarker.to })
     pure newMarker
@@ -297,14 +314,16 @@ eval = case _ of
     target <- gets _.cursorPosition
     gets _.codeMirror >>= traverse_ \ cm -> do
       doc <- H.liftEff $ PCM.getDoc cm
-      whileM_
-        (lift2 (isBefore NotStrictly) getsTip (pure target))
+      sentences <- whileM
+        (lift2 (isBefore Strictly) getsTip (pure target))
         do
-          nextMarker >>= traverse_ \ marker -> do
+          nextMarker >>= traverse \ marker -> do
             reference <- H.liftEff do
               PCM.markText doc marker.from marker.to (Stage.textMarkerOptions marker.stage)
             H.modify $ over _markers $ Map.insert marker.id { marker, reference }
-            H.raise $ Sentence marker.id marker.sentence
+            pure $ Sentence marker.id marker.sentence
+      H.liftEff $ log "Now raising sentences"
+      for_ sentences (_ # traverse_ H.raise)
     pure next
 
   Init next -> do

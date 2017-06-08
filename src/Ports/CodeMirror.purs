@@ -51,6 +51,10 @@ foreign import _getDoc :: ∀ e. EU.EffFn1 e CodeMirror Doc
 getDoc :: ∀ e. CodeMirror -> Eff e Doc
 getDoc = EU.runEffFn1 _getDoc
 
+foreign import _getRange :: ∀ e. EU.EffFn4 e Doc Position Position (Nullable String) String
+getRange :: ∀ e. Doc -> Position -> Position -> Maybe String -> Eff e String
+getRange d f t m = EU.runEffFn4 _getRange d f t (toNullable m)
+
 foreign import _getValue :: ∀ e. EU.EffFn2 e Doc (Nullable String) String
 getValue :: ∀ e. Doc -> Maybe String -> Eff e String
 getValue d m = EU.runEffFn2 _getValue d (toNullable m)
@@ -58,6 +62,10 @@ getValue d m = EU.runEffFn2 _getValue d (toNullable m)
 foreign import _hasFocus :: ∀ e. EU.EffFn1 e CodeMirror Boolean
 hasFocus :: ∀ e. CodeMirror -> Eff e Boolean
 hasFocus = EU.runEffFn1 _hasFocus
+
+foreign import _lineCount :: ∀ e. EU.EffFn1 e Doc Int
+lineCount :: ∀ e. Doc -> Eff e Int
+lineCount = EU.runEffFn1 _lineCount
 
 foreign import _markText ::
   ∀ e. EU.EffFn4 e Doc Position Position (Nullable TMO.RawTextMarkerOptions) TextMarker
