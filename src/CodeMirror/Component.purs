@@ -26,7 +26,6 @@ import Data.Foldable (find)
 import Data.Lens (lens, over, view)
 import Data.Lens.Types (Lens')
 import Data.Maybe (Maybe(..))
-import Data.String (take)
 import Data.Traversable (for_, traverse, traverse_)
 import Halogen.HTML.CSS (style)
 import Halogen.Query (RefLabel(..))
@@ -110,7 +109,7 @@ nextTip = do
     tip <- getsTip
     nbLines <- H.liftEff $ PCM.lineCount doc
     code <- H.liftEff $ PCM.getRange doc tip { line : nbLines + 1, ch : 0 } Nothing
-    H.liftEff $ log $ "Suffix seems to be: " <> take 20 code
+    -- H.liftEff $ log $ "Suffix seems to be: " <> take 20 code
     pure $ do
       r <- nextSentence code { line : 0, ch : 0 }
       -- at this point, `r.position` is the position within the code suffix, not the global one
@@ -322,7 +321,7 @@ eval = case _ of
               PCM.markText doc marker.from marker.to (Stage.textMarkerOptions marker.stage)
             H.modify $ over _markers $ Map.insert marker.id { marker, reference }
             pure $ Sentence marker.id marker.sentence
-      H.liftEff $ log "Now raising sentences"
+      -- H.liftEff $ log "Now raising sentences"
       for_ sentences (_ # traverse_ H.raise)
     pure next
 
