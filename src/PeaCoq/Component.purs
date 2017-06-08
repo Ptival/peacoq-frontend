@@ -12,6 +12,7 @@ import CodeMirror.TextMarker (TextMarkerId)
 import Control.Monad.Aff.AVar (AVAR)
 import Control.Monad.Aff.Class (class MonadAff)
 import Control.Monad.Aff.Console (CONSOLE)
+import Control.Monad.Eff.Console (log)
 import Data.Either.Nested (Either2)
 import Data.Foldable (fold)
 import Data.Functor.Coproduct.Nested (Coproduct2)
@@ -26,7 +27,7 @@ import Network.HTTP.Affjax (AJAX)
 import SerAPI.Answer (Answer(..), AnswerKind(..))
 import SerAPI.Command (Command(..), CommandTag, TaggedCommand, tagOf)
 import SerAPI.Command.Control (Control(..), defaultAddOptions)
-import SerAPI.Feedback (Feedback)
+import SerAPI.Feedback (Feedback(..), FeedbackContent(..))
 import SerAPI.Types (StateId, RouteId)
 
 peaCoqGetContextRouteId :: RouteId
@@ -171,8 +172,12 @@ eval = case _ of
       _ -> pure unit
     pure next
 
-  SAPIFeedback f next -> do
-    _ <- H.query' cmSlot unit $ H.action $ CM.ProcessFeedback f
+  SAPIFeedback feedback@(Feedback f) next -> do
+    _ <- H.query' cmSlot unit $ H.action $ CM.ProcessFeedback feedback
+    case f.contents of
+      Processed ->
+        H.liftEff $ log $ "Processed: " <> show f.id
+      _ -> pure unit
     pure next
 
   SAPIPing next -> do

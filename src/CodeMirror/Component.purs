@@ -12,7 +12,7 @@ import Ports.CodeMirror as PCM
 import Ports.CodeMirror.Configuration as CFG
 import Stage as Stage
 import CodeMirror.Position (Position, Strictness(..), addPosition, initialPosition, isBefore, isWithinRange)
-import CodeMirror.TextMarker (TextMarker, TextMarkerId)
+import CodeMirror.TextMarker (TextMarker, TextMarkerId, textMarkerColor, textMarkerOptions)
 import Control.Apply (lift2)
 import Control.Monad.Aff.AVar (AVAR)
 import Control.Monad.Aff.Class (class MonadAff)
@@ -91,11 +91,12 @@ data Message
 addMarker :: ∀ m. MonadState State m => Position -> Position -> String -> m TextMarker
 addMarker from to sentence = do
   nextMarkerId <- gets _.nextMarkerId
-  let newMarker = { id       : nextMarkerId
+  let newMarker = { id         : nextMarkerId
                   , from
                   , to
                   , sentence
-                  , stage    : Stage.ToProcess
+                  , stage      : Stage.ToProcess
+                  , underFocus : false
                   }
   modify (\ s -> s { nextMarkerId = nextMarkerId + 1 })
   pure newMarker
@@ -128,21 +129,22 @@ nextMarker = do
     pure newMarker
 
 renderMarker :: Position -> TextMarker -> H.ComponentHTML Query
-renderMarker cursorPosition { from, id, stage, to } =
+renderMarker cursorPosition marker@{ from, id, stage, to } =
   HH.div
   [ HP.title $ show id
   , style do
       flexCol
-      CSS.backgroundColor $ Stage.stageColor stage
-      CSS.border          CSS.solid (CSS.fromString "2px")
-        $ if isWithinRange NotStrictly from Strictly to cursorPosition
-            then CSS.red
-            else CSS.black
+      CSS.backgroundColor $ textMarkerColor marker
+      -- CSS.border          CSS.solid (CSS.fromString "2px") CSS.black
       CSS.boxSizing       $ CSS.borderBox
       CSS.height          $ CSS.fromString "100%"
       CSS.width           $ CSS.fromString "100%"
   ]
-  [ HH.text (show id) ]
+  [ HH.text $ case stage of
+       Stage.Processed sid -> show sid
+       _ -> ""
+  ]
+  --[ HH.text (show id) ]
 
 flex :: CSS.StyleM Unit
 flex = do
@@ -255,7 +257,7 @@ updateMarker markerId update = do
       let newMarker = update marker
       newReference <- H.liftEff $ do
         PCM.clearTextMarker reference
-        PCM.markText doc marker.from marker.to (Stage.textMarkerOptions newMarker.stage)
+        PCM.markText doc newMarker.from newMarker.to (textMarkerOptions newMarker)
       H.modify $ over _markers $ Map.insert markerId { marker : newMarker, reference : newReference }
   pure unit
 
@@ -278,6 +280,20 @@ deleteMarkerUpdatingTip markerId = do
     Just lastMarker -> pure lastMarker.value.marker.to
   H.modify (_ { tip = newTip })
   getsDoc >>= traverse_ \ doc -> H.liftEff $ PCM.setCursor doc newTip Nothing
+
+updateMarkerUnderFocus ::
+  ∀ e m. MonadAff (CodeMirrorEffects e) m =>
+  Position -> DSL m Unit
+updateMarkerUnderFocus cursorPosition = do
+  getsDoc >>= traverse_ \ doc -> do
+    H.gets (view _markers) >>= traverse_ \ { marker } -> do
+      let markerShouldBeUnderFocus = isWithinRange NotStrictly marker.from Strictly marker.to cursorPosition
+      if marker.underFocus && not markerShouldBeUnderFocus
+        then updateMarker marker.id (_ { underFocus = false })
+        else if not marker.underFocus && markerShouldBeUnderFocus
+             then updateMarker marker.id (_ { underFocus = true })
+             else pure unit
+  pure unit
 
 getsDoc :: ∀ e m. MonadAff (CodeMirrorEffects e) m => DSL m (Maybe PCM.Doc)
 getsDoc = gets _.codeMirror >>= traverse \ cm -> H.liftEff $ PCM.getDoc cm
@@ -307,7 +323,7 @@ eval = case _ of
         reference <- H.liftEff do
           doc <- PCM.getDoc cm
           PCM.setCursor doc marker.to Nothing
-          PCM.markText doc marker.from marker.to (Stage.textMarkerOptions marker.stage)
+          PCM.markText doc marker.from marker.to (textMarkerOptions marker)
         H.modify $ over _markers $ Map.insert marker.id { marker, reference }
         H.raise $ Sentence marker.id marker.sentence
     pure next
@@ -321,7 +337,7 @@ eval = case _ of
         do
           nextMarker >>= traverse \ marker -> do
             reference <- H.liftEff do
-              PCM.markText doc marker.from marker.to (Stage.textMarkerOptions marker.stage)
+              PCM.markText doc marker.from marker.to (textMarkerOptions marker)
             H.modify $ over _markers $ Map.insert marker.id { marker, reference }
             pure $ Sentence marker.id marker.sentence
       -- H.liftEff $ log "Now raising sentences"
@@ -399,19 +415,17 @@ eval = case _ of
             pure next
           _ -> pure next
 
-  HandleCursorActivity o status -> do
-    pos <- H.liftEff $ do
-      doc          <- PCM.getDoc o.instance
-      PCM.getCursor doc Nothing
-    H.modify (_ { cursorPosition = pos })
+  HandleCursorActivity _ status -> do
+    getsDoc >>= traverse_ \ doc -> do
+      cursorPosition <- H.liftEff $ PCM.getCursor doc Nothing
+      H.modify (_ { cursorPosition = cursorPosition })
+      updateMarkerUnderFocus cursorPosition
     pure $ status H.Listening
 
   HandleChange change status -> do
     -- H.liftEff $ log $ "Change, removed: " <> change.changeObj.removed
-    H.gets _.codeMirror >>= traverse_ \ cm -> do
-      code <- H.liftEff $ do
-        doc <- PCM.getDoc cm
-        PCM.getValue doc Nothing
+    getsDoc >>= traverse_ \ doc -> do
+      code <- H.liftEff $ PCM.getValue doc Nothing
       H.modify (_ { code = code })
     pure $ status H.Listening
 
