@@ -11,7 +11,7 @@ import Halogen.HTML.Properties as HP
 import Ports.CodeMirror as PCM
 import Ports.CodeMirror.Configuration as CFG
 import Stage as Stage
-import CodeMirror.Position (Position, Strictness(Strictly), addPosition, initialPosition, isBefore)
+import CodeMirror.Position (Position, Strictness(..), addPosition, initialPosition, isBefore, isWithinRange)
 import CodeMirror.TextMarker (TextMarker, TextMarkerId)
 import Control.Apply (lift2)
 import Control.Monad.Aff.AVar (AVAR)
@@ -127,14 +127,17 @@ nextMarker = do
     modify (\ s -> s { tip = newMarker.to })
     pure newMarker
 
-renderMarker :: TextMarker -> H.ComponentHTML Query
-renderMarker { id, stage } =
+renderMarker :: Position -> TextMarker -> H.ComponentHTML Query
+renderMarker cursorPosition { from, id, stage, to } =
   HH.div
   [ HP.title $ show id
   , style do
       flexCol
       CSS.backgroundColor $ Stage.stageColor stage
-      CSS.border          CSS.solid (CSS.fromString "1px") CSS.black
+      CSS.border          CSS.solid (CSS.fromString "2px")
+        $ if isWithinRange NotStrictly from Strictly to cursorPosition
+            then CSS.red
+            else CSS.black
       CSS.boxSizing       $ CSS.borderBox
       CSS.height          $ CSS.fromString "100%"
       CSS.width           $ CSS.fromString "100%"
@@ -212,7 +215,7 @@ render { code, cursorPosition, markers, tip } =
          CSS.minHeight $ markerBarHeight
          CSS.maxHeight $ markerBarHeight
     ]
-    (fromFoldable $ (renderMarker <<< _.marker) <$> Map.values markers)
+    (fromFoldable $ (renderMarker cursorPosition <<< _.marker) <$> Map.values markers)
   ]
     -- [ HH.button [ HE.onClick $ HE.input_ Forward ]
     --             [ HH.text "+" ]

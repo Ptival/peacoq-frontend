@@ -3,7 +3,7 @@ module SerAPI.Command.Control where
 import Data.Foldable (fold)
 import Data.Maybe (Maybe(..))
 import SerAPI.Command.ToSexp (class ToSexp, toSexp)
-import SerAPI.Types (StateId)
+import SerAPI.Types (StateId, RouteId)
 
 type AddOptions =
   { limit  :: Maybe Int
@@ -20,6 +20,15 @@ defaultAddOptions =
   , verb   : Nothing
   }
 
+type QueryOptions =
+  { route :: Maybe RouteId
+  }
+
+defaultQueryOptions :: QueryOptions
+defaultQueryOptions =
+  { route : Nothing
+  }
+
 data Control
   = LibAdd     { qualifiedPath :: Array String
                , physicalPath  :: String
@@ -32,6 +41,9 @@ data Control
                }
   | StmObserve { stateId :: StateId
                }
+  | StmQuery { queryOptions :: QueryOptions
+             , query        :: String
+             }
   | Quit
 
 toSexpOption :: ∀ t. ToSexp t => String -> Maybe t -> String
@@ -45,11 +57,10 @@ instance toSexpControl :: ToSexp Control where
     LibAdd r -> "TODO"
 
     StmAdd { addOptions, sentence } ->
-      let { limit, ontop, newtip, verb } = addOptions in
-      let opts = fold [ toSexpOption "limit"  limit
-                      , toSexpOption "ontop"  ontop
-                      , toSexpOption "newtip" newtip
-                      , toSexpOption "verb"   verb
+      let opts = fold [ toSexpOption "limit"  addOptions.limit
+                      , toSexpOption "ontop"  addOptions.ontop
+                      , toSexpOption "newtip" addOptions.newtip
+                      , toSexpOption "verb"   addOptions.verb
                       ]
       in
       fold ["(StmAdd (", opts, ") ", toSexp sentence, ")"]
@@ -57,5 +68,11 @@ instance toSexpControl :: ToSexp Control where
     StmCancel { stateIds } -> fold ["(StmCancel ", toSexp stateIds , ")"]
 
     StmObserve { stateId } -> fold ["(StmObserve ", toSexp stateId , ")"]
+
+    StmQuery { queryOptions, query } ->
+      let opts = fold [ toSexpOption "route" queryOptions.route
+                      ]
+      in
+      fold ["(StmQuery (", opts, ") ", toSexp query, ")"]
 
     Quit -> "Quit"

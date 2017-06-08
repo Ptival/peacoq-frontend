@@ -31,6 +31,7 @@ data Strictness
   = Strictly
   | NotStrictly
 
+-- | `isBefore s p1 p2` if p1 before p2
 isBefore :: Strictness -> Position -> Position -> Boolean
 isBefore strictness { line : l1, ch : c1 } { line : l2, ch : c2 } =
   l1 < l2 || (l1 == l2 && before strictness c1 c2)
@@ -38,8 +39,13 @@ isBefore strictness { line : l1, ch : c1 } { line : l2, ch : c2 } =
     before Strictly    a b = a <  b
     before NotStrictly a b = a <= b
 
+-- | `isAfter s p1 p2` if p1 is after p2
 isAfter :: Strictness -> Position -> Position -> Boolean
 isAfter s a b = isBefore s b a
+
+-- | `isWithinRange sf from st to x` if `x` is within the range from `from` to `to`
+isWithinRange :: Strictness -> Position -> Strictness -> Position -> Position -> Boolean
+isWithinRange sf from st to x = isAfter sf x from && isBefore st x to
 
 initialPosition :: Position
 initialPosition =

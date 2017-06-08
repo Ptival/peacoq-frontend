@@ -7,6 +7,7 @@ import Ports.Sexp (Sexp(..))
 import SerAPI.FromSexp (class FromSexp, fromSexp)
 
 type EditId = Int
+type RouteId = Int
 type StateId = Int
 
 data CoqObject = CoqObject
