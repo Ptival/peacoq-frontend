@@ -176,7 +176,8 @@ eval = case _ of
     _ <- H.query' cmSlot unit $ H.action $ CM.ProcessFeedback feedback
     case f.contents of
       Processed ->
-        H.liftEff $ log $ "Processed: " <> show f.id
+        -- H.liftEff $ log $ "Processed: " <> show f.id
+        pure unit
       _ -> pure unit
     pure next
 

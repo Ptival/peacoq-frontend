@@ -21,7 +21,7 @@ import Control.Monad.Eff.Console (CONSOLE, log)
 import Control.Monad.Loops (whileM)
 import Control.Monad.State.Class (class MonadState, gets, modify)
 import Coq.Position (nextSentence)
-import Data.Array (elem, fromFoldable)
+import Data.Array (elem, fromFoldable, snoc)
 import Data.Foldable (find)
 import Data.Lens (lens, over, view)
 import Data.Lens.Types (Lens')
@@ -51,6 +51,7 @@ type State =
   { code           :: String
   , codeMirror     :: Maybe PCM.CodeMirror
   , cursorPosition :: Position
+  , feedback       :: Map.Map StateId (Array Feedback)
   , markers        :: Map.Map TextMarkerId TextMarkerWithReference
   , nextMarkerId   :: TextMarkerId
   , tip            :: Position
@@ -68,6 +69,7 @@ initialState { code } =
   { code
   , codeMirror     : Nothing
   , cursorPosition : initialPosition
+  , feedback       : Map.empty
   , markers        : Map.empty
   , nextMarkerId   : 0
   , tip            : initialPosition
@@ -309,6 +311,12 @@ getsProcessingMarkerWithStateId sid =
   >>> find (\ m -> m.marker.stage == Stage.Processing sid)
   >>> liftA1 _.marker
 
+addFeedback :: StateId -> Feedback -> Map.Map StateId (Array Feedback) -> Map.Map StateId (Array Feedback)
+addFeedback sid f m = Map.alter alter sid m
+  where
+    alter Nothing  = Just [f]
+    alter (Just a) = Just (snoc a f)
+
 eval :: ∀ e m. MonadAff (CodeMirrorEffects e) m => Query ~> DSL m
 eval = case _ of
 
@@ -371,7 +379,14 @@ eval = case _ of
       Added sid loc added -> do
         case maybeMarkerId of
           Nothing       -> H.liftEff $ log $ "Received Added for an unknown marker id"
-          Just markerId -> updateMarker markerId (_ { stage = Stage.Processing sid })
+          Just markerId -> do
+            updateMarker markerId (_ { stage = Stage.Processing sid })
+            feedbackMap <- gets _.feedback
+            Map.lookup sid feedbackMap # traverse_ \ feedbackArray -> do
+              -- H.liftEff $ log $ "Found some unprocessed feedback for this state id, replaying"
+              for_ feedbackArray \ feedback -> do
+                eval $ H.action $ ProcessFeedback feedback
+              H.modify (_ { feedback = Map.delete sid feedbackMap })
         pure next
 
       Canceled stateIds-> do
@@ -400,14 +415,24 @@ eval = case _ of
         H.liftEff $ log $ "TODO: AnswerForMarker: " <> show answer
         pure next
 
-  ProcessFeedback (Feedback { id, contents, route }) next -> do
+  ProcessFeedback f@(Feedback { id, contents, route }) next -> do
     case id of
       EditId  eid -> pure next
       StateId sid ->
         case contents of
           Processed -> do
-            getsProcessingMarkerWithStateId sid >>= traverse_ \ marker -> do
-              updateMarker marker.id (_ { stage = Stage.Processed sid })
+            maybeMarker <- getsProcessingMarkerWithStateId sid
+            -- Coq sometimes sends Feedback for some StateId before it tells us about the StateId...
+            -- We store it temporarily here, and re-run it whenever the StateId becomes known...
+            case maybeMarker of
+              Nothing -> do
+                case contents of
+                  -- I only store the Processed otherwise there's way too much
+                  Processed -> H.modify (\ s -> s { feedback = addFeedback sid f s.feedback  })
+                  _ -> pure unit
+              Just marker -> do
+                -- H.liftEff $ log $ "Updating marker to processed: " <> show sid
+                updateMarker marker.id (_ { stage = Stage.Processed sid })
             pure next
           Message Error _ _ -> do
             getsProcessingMarkerWithStateId sid >>= traverse_ \ marker -> do
