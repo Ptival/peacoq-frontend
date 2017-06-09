@@ -10,8 +10,9 @@ import Halogen.HTML as HH
 import Halogen.HTML.Properties as HP
 import Ports.CodeMirror as PCM
 import Ports.CodeMirror.Configuration as CFG
+import RxJS.Observable as RX
 import Stage as Stage
-import CodeMirror.Position (Position, Strictness(..), addPosition, initialPosition, isBefore, isWithinRange)
+import CodeMirror.Position (Position, Position'(..), Strictness(..), addPosition, initialPosition, isBefore, isWithinRange)
 import CodeMirror.TextMarker (TextMarker, TextMarkerId, textMarkerColor, textMarkerOptions)
 import Control.Apply (lift2)
 import Control.Monad.Aff.AVar (AVAR)
@@ -33,8 +34,29 @@ import SerAPI.Answer (AnswerKind(..))
 import SerAPI.Feedback (EditOrStateId(..), Feedback(..), FeedbackContent(..), Level(..))
 import SerAPI.Types (StateId)
 
+-- | Configuration variables
+
 markerBarHeight :: ∀ a. CSS.Size a
 markerBarHeight = CSS.fromString "20px"
+
+cursorActivityDebounceMilliseconds :: Int
+cursorActivityDebounceMilliseconds = 200
+
+-- | This turns an ObservableT you wish to listen to forever into a callback.
+-- | Note that this explicitly forgets about the Subscription, so you can't stop it.
+observableToCallback :: ∀ e t. RX.ObservableT (Eff e) t -> (t -> Eff e Unit) -> Eff e Unit
+observableToCallback o k = void $ join $ RX.subscribeNext k o
+
+codeMirrorCursorActivity :: ∀ e. PCM.CodeMirror -> RX.ObservableT (Eff e) { instance :: PCM.CodeMirror }
+codeMirrorCursorActivity cm =
+  -- don't try to simplify this, the type system won't be happy
+  RX.create \ { next } -> do
+    PCM.onCodeMirrorCursorActivity cm \ o -> do
+      next o
+
+debouncedCodeMirrorCursorActivity :: ∀ e. PCM.CodeMirror -> RX.ObservableT (Eff e) { instance :: PCM.CodeMirror }
+debouncedCodeMirrorCursorActivity =
+  RX.debounceTime cursorActivityDebounceMilliseconds <<< codeMirrorCursorActivity
 
 type TextMarkerWithReference =
   { marker    :: TextMarker
@@ -88,6 +110,7 @@ data Query a
 
 data Message
   = Cancel StateId
+  | Observe StateId
   | Sentence TextMarkerId String
 
 addMarker :: ∀ m. MonadState State m => Position -> Position -> String -> m TextMarker
@@ -300,6 +323,10 @@ updateMarkerUnderFocus cursorPosition = do
 getsDoc :: ∀ e m. MonadAff (CodeMirrorEffects e) m => DSL m (Maybe PCM.Doc)
 getsDoc = gets _.codeMirror >>= traverse \ cm -> H.liftEff $ PCM.getDoc cm
 
+getsMarker :: ∀ e m. MonadAff (CodeMirrorEffects e) m => TextMarkerId -> DSL m (Maybe TextMarker)
+getsMarker markerId = do
+  H.gets (_.markers >>> Map.lookup markerId) >>= traverse \ { marker } -> pure marker
+
 getsTip :: ∀ e m. MonadAff (CodeMirrorEffects e) m => DSL m Position
 getsTip = gets _.tip
 
@@ -366,7 +393,7 @@ eval = case _ of
       H.liftEff $ PCM.setSize cm "100%" "100%"
       H.modify (_ { codeMirror = Just cm })
       subscribeTo (PCM.onCodeMirrorChange cm)         HandleChange
-      subscribeTo (PCM.onCodeMirrorCursorActivity cm) HandleCursorActivity
+      subscribeTo (observableToCallback $ debouncedCodeMirrorCursorActivity cm) HandleCursorActivity
       for_ keyBindings \ { key, keyS } -> do
         subscribeTo (PCM.addKeyMap cm keyS false) $ const (HandleKey key)
     pure next
@@ -381,6 +408,12 @@ eval = case _ of
           Nothing       -> H.liftEff $ log $ "Received Added for an unknown marker id"
           Just markerId -> do
             updateMarker markerId (_ { stage = Stage.Processing sid })
+            -- if the marker is at the tip, we want to observe it
+            tip <- getsTip
+            getsMarker markerId >>= traverse_ \ marker -> do
+              when (Position' tip == Position' marker.to) do
+                H.raise $ Observe sid
+            -- the marker might have missed some Feedback that arrived too early, we deliver it now
             feedbackMap <- gets _.feedback
             Map.lookup sid feedbackMap # traverse_ \ feedbackArray -> do
               -- H.liftEff $ log $ "Found some unprocessed feedback for this state id, replaying"

@@ -139,9 +139,7 @@ eval = case _ of
     pure next
 
   Ping next -> do
-    -- H.liftEff $ log "Ping"
     ping >>= handleResponse
-    -- H.liftEff $ log "Done ping"
     pure next
 
   TagCommand cmd next -> do

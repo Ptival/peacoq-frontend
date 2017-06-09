@@ -36,6 +36,7 @@ peaCoqGetContextRouteId = 2
 -- this seems a little dumb, but looks like we have to...
 data Query a
   = CodeMirrorCancel   StateId             a
+  | CodeMirrorObserve  StateId             a
   | CodeMirrorSentence TextMarkerId String a
   | SAPIPing                               a
   | SAPIAnswer         Answer              a
@@ -65,6 +66,7 @@ type Message = Void
 handleCodeMirror :: CM.Message -> Maybe (Query Unit)
 handleCodeMirror = case _ of
   CM.Cancel   stateId           -> Just $ H.action $ CodeMirrorCancel   stateId
+  CM.Observe  stateId           -> Just $ H.action $ CodeMirrorObserve  stateId
   CM.Sentence markerId sentence -> Just $ H.action $ CodeMirrorSentence markerId sentence
 
 handleSerAPI :: SAPI.Message -> Maybe (Query Unit)
@@ -145,6 +147,11 @@ eval = case _ of
     tagAndSend $ stmCancel [stateId]
     pure next
 
+  CodeMirrorObserve stateId next -> do
+    tagAndSend $ stmObserve stateId
+    -- tagAndSend $ stmQuery "PeaCoqGetContext." peaCoqGetContextRouteId
+    pure next
+
   CodeMirrorSentence markerId sentence next -> do
     -- IMPORTANT: make sure the state is modified to account for the addTag before calling stmAdd
     -- DO NOT `tagAndSend`
@@ -161,10 +168,6 @@ eval = case _ of
     maybeMarkerId <- H.gets (view _tagToMarker >>> Map.lookup tag)
     _ <- H.query' cmSlot unit $ H.action $ CM.ProcessAnswer answer maybeMarkerId
     case answer of
-      -- When a stateId is added, we want to observe it
-      Added sid loc added -> do
-        tagAndSend $ stmObserve sid
-        tagAndSend $ stmQuery "PeaCoqGetContext." peaCoqGetContextRouteId
       -- When an answer has completed, we can remove its tag from tagToMarker
       Completed -> do
         -- H.liftEff $ log $ "Answer " <> show tag <> " has completed"
@@ -175,8 +178,8 @@ eval = case _ of
   SAPIFeedback feedback@(Feedback f) next -> do
     _ <- H.query' cmSlot unit $ H.action $ CM.ProcessFeedback feedback
     case f.contents of
-      Processed ->
-        -- H.liftEff $ log $ "Processed: " <> show f.id
+      Processed -> do
+        H.liftEff $ log $ "Processed: " <> show f.id
         pure unit
       _ -> pure unit
     pure next

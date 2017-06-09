@@ -13,11 +13,14 @@ import Data.Traversable (traverse_)
 import Halogen.Aff.Util (selectElement)
 import Halogen.VDom.Driver (runUI)
 
+pingDelay :: Milliseconds
+pingDelay = Milliseconds 1000.0
+
 main :: ∀ e. Eff (HA.HalogenEffects (PeaCoq.PeaCoqEffects e)) Unit
 main = HA.runHalogenAff do
   selectElement (QuerySelector "body") >>= traverse_ \ body -> do
     peaCoq <- runUI PeaCoq.peaCoqComponent unit body
     _ <- forever $ do
       peaCoq.query $ H.action PeaCoq.SAPIPing
-      delay (Milliseconds 250.0)
+      delay pingDelay
     pure unit
