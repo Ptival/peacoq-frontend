@@ -1,9 +1,8 @@
 module CodeMirror.Component where
 
 import Prelude
+import CodeMirror.Style as CMS
 import CSS as CSS
-import CSS.Display as CSSD
-import CSS.Overflow as CSSO
 import Data.Map as Map
 import Halogen as H
 import Halogen.HTML as HH
@@ -173,81 +172,47 @@ renderMarker cursorPosition marker@{ from, id, stage, to } =
 
 flex :: CSS.StyleM Unit
 flex = do
-  CSS.alignContent  $ CSS.stretch
-  CSS.alignItems    $ CSS.stretch
-  CSS.display       $ CSS.flex
+  -- CSS.alignContent  $ CSS.stretch
+  -- CSS.alignItems    $ CSS.stretch
+  -- CSS.display       $ CSS.flex
+  pure unit
 
 flexCol :: CSS.StyleM Unit
 flexCol = do
-  flex
-  CSS.flexDirection $ CSS.column
+  -- flex
+  -- CSS.flexDirection $ CSS.column
+  pure unit
 
 flexRow :: CSS.StyleM Unit
 flexRow = do
-  flex
-  CSS.flexDirection $ CSS.row
+  -- flex
+  -- CSS.flexDirection $ CSS.row
+  pure unit
 
 render :: State -> H.ComponentHTML Query
 render { code, cursorPosition, markers, tip } =
-  HH.div [ style $ do
-              flexCol
-              CSS.height    $ CSS.fromString "100%"
-              CSS.minHeight $ CSS.fromString "100%"
-         ]
-  $
-  [ HH.div [ style $ do
-                flexRow
-                CSS.flexGrow $ 2
-           ]
-    $
-    [ HH.div
-      [ style $ do
-           flexCol
-           CSS.width $ CSS.fromString "50%"
-      ]
+  HH.div [ CMS.componentStyle ] $
+  [ HH.div [ CMS.editorContextStyle ] $
+    [ HH.div [ CMS.editorContainerStyle ] $
       [ HH.div
         [ HP.ref (RefLabel "codemirror")
-        , style do
-             CSSD.float    $ CSSD.floatLeft
-             CSS.height    $ CSS.fromString "100%"
-             CSS.minHeight $ CSS.fromString "100%"
+        , CMS.editorStyle
         ]
         [ -- intentionally left empty, will be filled by CodeMirror
         ]
       ]
     ]
     <>
-    [ HH.div
-      [ style do
-           flexCol
-           CSS.width     $ CSS.fromString "50%"
-      ]
-      [ HH.pre
-        [ style $ do
-             CSS.height       $ CSS.fromString "100%"
-             CSS.minHeight    $ CSS.fromString "100%"
-             CSS.marginBottom $ CSS.fromString "0"
-             CSS.marginTop    $ CSS.fromString "0"
-             CSSO.overflowY   $ CSSO.overflowAuto
-        ]
+    [ HH.div [ CMS.contextContainerStyle ]
+      [ HH.pre [ CMS.contextStyle ]
         [ HH.text code ]
       ]
     ]
   ]
   <>
-  [ HH.div
-    [ style $ do
-         flexRow
-         CSS.height    $ markerBarHeight
-         CSS.minHeight $ markerBarHeight
-         CSS.maxHeight $ markerBarHeight
-    ]
-    (fromFoldable $ (renderMarker cursorPosition <<< _.marker) <$> Map.values markers)
+  [ HH.div [ CMS.markerBarStyle ] $
+    fromFoldable $ (renderMarker cursorPosition <<< _.marker) <$> Map.values markers
   ]
-    -- [ HH.button [ HE.onClick $ HE.input_ Forward ]
-    --             [ HH.text "+" ]
-    -- , HH.p_ [ HH.text ("Line is: " <> show cursorPosition.line)]
-    -- ]
 
 type DSL = H.ComponentDSL State Query Message
 
