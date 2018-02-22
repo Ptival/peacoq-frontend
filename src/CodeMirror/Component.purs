@@ -1,7 +1,6 @@
 module CodeMirror.Component where
 
 import Prelude
-import CSS as CSS
 import CodeMirror.Style as CMS
 import Halogen as H
 import Halogen.HTML as HH
@@ -10,20 +9,18 @@ import Ports.CodeMirror as PCM
 import Ports.CodeMirror.Configuration as CFG
 import RxJS.Observable as RX
 --import CodeMirror.Position (Position, Position'(..), Strictness(..), addPosition, initialPosition, isBefore, isWithinRange)
-import CodeMirror.TextMarker (TextMarker, TextMarkerId, textMarkerColor, textMarkerOptions)
+--import CodeMirror.TextMarker (TextMarker, TextMarkerId, textMarkerColor, textMarkerOptions)
 --import Control.Apply (lift2)
 import Control.Monad.Aff.AVar (AVAR)
 import Control.Monad.Aff.Class (class MonadAff)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Console (CONSOLE, log)
 --import Control.Monad.Loops (whileM)
-import Control.Monad.State.Class (class MonadState, gets, modify)
+import Control.Monad.State.Class (gets)
 --import Data.Array (elem, fromFoldable, snoc)
 --import Data.Foldable (find)
-import Data.Lens (lens, over, view)
-import Data.Lens.Types (Lens')
 import Data.Maybe (Maybe(..))
-import Data.Traversable (for_, traverse, traverse_)
+import Data.Traversable (traverse, traverse_)
 --import Data.Tuple (snd)
 --import Halogen.HTML.CSS (style)
 import Halogen.Query (RefLabel(..))
@@ -51,30 +48,12 @@ initialState { code } =
   }
 
 data Query a
-  = Init                 a
-  | HandleChange         PCM.CodeMirrorChange         (H.SubscribeStatus -> a)
+  = Init                              a
+  | SetValue     String               a
+  | HandleChange PCM.CodeMirrorChange (H.SubscribeStatus -> a)
 
 data Message
-  = Updated String String
-
-flex :: CSS.StyleM Unit
-flex = do
-  -- CSS.alignContent  $ CSS.stretch
-  -- CSS.alignItems    $ CSS.stretch
-  -- CSS.display       $ CSS.flex
-  pure unit
-
-flexCol :: CSS.StyleM Unit
-flexCol = do
-  -- flex
-  -- CSS.flexDirection $ CSS.column
-  pure unit
-
-flexRow :: CSS.StyleM Unit
-flexRow = do
-  -- flex
-  -- CSS.flexDirection $ CSS.row
-  pure unit
+  = Updated String
 
 render :: State -> H.ComponentHTML Query
 render { code } =
@@ -87,12 +66,6 @@ render { code } =
         ]
         [ -- intentionally left empty, will be filled by CodeMirror
         ]
-      ]
-    ]
-    <>
-    [ HH.div [ CMS.contextContainerStyle ]
-      [ HH.pre [ CMS.contextStyle ]
-        [ HH.text code ]
       ]
     ]
   ]
@@ -118,6 +91,7 @@ eval = case _ of
     getDoc >>= traverse_ \ doc -> do
       code <- H.liftEff $ PCM.getValue doc Nothing
       H.modify (_ { code = code })
+      H.raise $ Updated code
     pure $ status H.Listening
 
   Init next -> do
@@ -127,6 +101,7 @@ eval = case _ of
         PCM.codeMirror element
           (CFG.def { autofocus      = Just true
                    , lineNumbers    = Just true
+                   , lineWrapping   = Just true
                    , mode           = Just "text/x-ocaml"
                    , value          = Just code
                    }
@@ -136,6 +111,11 @@ eval = case _ of
       subscribeTo
         (PCM.onCodeMirrorChange cm)
         HandleChange
+    pure next
+
+  SetValue value next -> do
+    getDoc >>= traverse_ \ doc -> H.liftEff do
+      PCM.setValue doc value
     pure next
 
   where
