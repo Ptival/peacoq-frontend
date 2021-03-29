@@ -9,7 +9,7 @@
     "codemirror": "^5.23.0",
     "npm-check-updates": "11.0.2",
     "requirejs": "^2.3.2",
-    "rxjs": "^5.4.0",
+    "rxjs": "^6.6.7",
     "s-expression": "^3.0.3"
   },
   "devDependencies": {
