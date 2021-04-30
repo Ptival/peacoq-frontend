@@ -7,7 +7,7 @@
   "repository": "http://github.com/Ptival/peacoq-frontend",
   "dependencies": {
     "codemirror": "^5.23.0",
-    "npm-check-updates": "11.0.2",
+    "npm-check-updates": "11.5.7",
     "requirejs": "^2.3.2",
     "rxjs": "^5.4.0",
     "s-expression": "^3.0.3"
