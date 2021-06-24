@@ -14,7 +14,7 @@
   },
   "devDependencies": {
     "@purescript/psci-support": "^3.0.0",
-    "@types/codemirror": "0.0.40",
+    "@types/codemirror": "5.60.1",
     "bower": "^1.8.2",
     "chokidar-cli": "^1.2.0",
     "npm-run-all": "^4.0.2",
