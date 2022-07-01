@@ -6,7 +6,7 @@
   "license": "GPL-3.0",
   "repository": "http://github.com/Ptival/peacoq-frontend",
   "dependencies": {
-    "codemirror": "^5.23.0",
+    "codemirror": "^6.0.1",
     "npm-check-updates": "11.5.11",
     "requirejs": "^2.3.2",
     "rxjs": "^5.4.0",
